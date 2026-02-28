@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/planner"
 )
 
 const ClientName = "codex"

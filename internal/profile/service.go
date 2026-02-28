@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 
-	"mcpup/internal/core"
-	"mcpup/internal/planner"
-	"mcpup/internal/store"
+	"github.com/mohammedsamin/mcpup/internal/core"
+	"github.com/mohammedsamin/mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 // ApplyOptions controls profile apply behavior.

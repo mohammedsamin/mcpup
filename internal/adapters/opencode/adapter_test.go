@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mcpup/internal/adapters"
-	"mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/adapters"
+	"github.com/mohammedsamin/mcpup/internal/planner"
 )
 
 func TestAdapterDryRunDoesNotWriteFile(t *testing.T) {

@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mcpup/internal/adapters"
-	"mcpup/internal/backup"
-	"mcpup/internal/core"
-	"mcpup/internal/planner"
-	"mcpup/internal/store"
+	"github.com/mohammedsamin/mcpup/internal/adapters"
+	"github.com/mohammedsamin/mcpup/internal/backup"
+	"github.com/mohammedsamin/mcpup/internal/core"
+	"github.com/mohammedsamin/mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 type fakeAdapter struct {

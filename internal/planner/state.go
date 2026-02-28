@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"mcpup/internal/store"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 // ClientState is the normalized desired/current state for one client.

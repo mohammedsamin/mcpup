@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mcpup/internal/core"
-	"mcpup/internal/store"
+	"github.com/mohammedsamin/mcpup/internal/core"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 // CheckStatus is health result type for one diagnostic check.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"mcpup/internal/store"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 func TestDesiredStateForClient(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"mcpup/internal/adapters"
-	"mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/adapters"
+	"github.com/mohammedsamin/mcpup/internal/planner"
 )
 
 const ClientName = "opencode"

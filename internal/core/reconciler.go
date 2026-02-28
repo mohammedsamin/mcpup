@@ -1,14 +1,14 @@
 package core
 
 import (
-	"mcpup/internal/adapters"
-	"mcpup/internal/adapters/claudecode"
-	"mcpup/internal/adapters/claudedesktop"
-	"mcpup/internal/adapters/codex"
-	"mcpup/internal/adapters/cursor"
-	"mcpup/internal/adapters/opencode"
-	"mcpup/internal/backup"
-	"mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/adapters"
+	"github.com/mohammedsamin/mcpup/internal/adapters/claudecode"
+	"github.com/mohammedsamin/mcpup/internal/adapters/claudedesktop"
+	"github.com/mohammedsamin/mcpup/internal/adapters/codex"
+	"github.com/mohammedsamin/mcpup/internal/adapters/cursor"
+	"github.com/mohammedsamin/mcpup/internal/adapters/opencode"
+	"github.com/mohammedsamin/mcpup/internal/backup"
+	"github.com/mohammedsamin/mcpup/internal/planner"
 )
 
 // ReconcileOptions controls reconciliation behavior.

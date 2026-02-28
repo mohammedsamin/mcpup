@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mcpup/internal/store"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 func TestRunDoctorWithValidCanonicalConfig(t *testing.T) {

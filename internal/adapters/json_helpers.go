@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/planner"
 )
 
 // JSONDocument preserves unknown top-level keys while manipulating mcpServers.

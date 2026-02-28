@@ -1,6 +1,6 @@
 package adapters
 
-import "mcpup/internal/planner"
+import "github.com/mohammedsamin/mcpup/internal/planner"
 
 // HarnessResult captures before/after planning and write behavior for adapter tests.
 type HarnessResult struct {

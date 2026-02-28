@@ -10,13 +10,13 @@ import (
 	"sort"
 	"strings"
 
-	"mcpup/internal/backup"
-	"mcpup/internal/core"
-	"mcpup/internal/output"
-	"mcpup/internal/planner"
-	"mcpup/internal/profile"
-	"mcpup/internal/store"
-	"mcpup/internal/validate"
+	"github.com/mohammedsamin/mcpup/internal/backup"
+	"github.com/mohammedsamin/mcpup/internal/core"
+	"github.com/mohammedsamin/mcpup/internal/output"
+	"github.com/mohammedsamin/mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/profile"
+	"github.com/mohammedsamin/mcpup/internal/store"
+	"github.com/mohammedsamin/mcpup/internal/validate"
 )
 
 var errUsage = errors.New("usage error")

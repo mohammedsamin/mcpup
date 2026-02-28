@@ -1,6 +1,6 @@
 package adapters
 
-import "mcpup/internal/planner"
+import "github.com/mohammedsamin/mcpup/internal/planner"
 
 // Adapter is the contract every client adapter must implement.
 type Adapter interface {

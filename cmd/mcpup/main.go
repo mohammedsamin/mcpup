@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"mcpup/internal/cli"
-	"mcpup/internal/core"
+	"github.com/mohammedsamin/mcpup/internal/cli"
+	"github.com/mohammedsamin/mcpup/internal/core"
 )
 
 func main() {
