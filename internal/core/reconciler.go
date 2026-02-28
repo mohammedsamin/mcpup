@@ -5,8 +5,11 @@ import (
 	"github.com/mohammedsamin/mcpup/internal/adapters/claudecode"
 	"github.com/mohammedsamin/mcpup/internal/adapters/claudedesktop"
 	"github.com/mohammedsamin/mcpup/internal/adapters/codex"
+	"github.com/mohammedsamin/mcpup/internal/adapters/continuedev"
 	"github.com/mohammedsamin/mcpup/internal/adapters/cursor"
 	"github.com/mohammedsamin/mcpup/internal/adapters/opencode"
+	"github.com/mohammedsamin/mcpup/internal/adapters/windsurf"
+	"github.com/mohammedsamin/mcpup/internal/adapters/zed"
 	"github.com/mohammedsamin/mcpup/internal/backup"
 	"github.com/mohammedsamin/mcpup/internal/planner"
 )
@@ -46,6 +49,9 @@ func NewReconciler() (*Reconciler, error) {
 	registry.Register(claudedesktop.Adapter{})
 	registry.Register(codex.Adapter{})
 	registry.Register(opencode.Adapter{})
+	registry.Register(windsurf.Adapter{})
+	registry.Register(zed.Adapter{})
+	registry.Register(continuedev.Adapter{})
 
 	manager, err := backup.NewManager()
 	if err != nil {

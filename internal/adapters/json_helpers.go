@@ -32,19 +32,24 @@ func ReadJSONDocument(path string) (JSONDocument, error) {
 
 // ReadStateFromMCPServers decodes state from a top-level mcpServers key.
 func ReadStateFromMCPServers(doc JSONDocument, client string) (planner.ClientState, error) {
+	return ReadStateFromServerMap(doc, "mcpServers", client)
+}
+
+// ReadStateFromServerMap decodes state from a top-level server object key.
+func ReadStateFromServerMap(doc JSONDocument, topLevelKey string, client string) (planner.ClientState, error) {
 	state := planner.ClientState{
 		Client:  client,
 		Servers: map[string]planner.ServerState{},
 	}
 
-	raw, ok := doc["mcpServers"]
+	raw, ok := doc[topLevelKey]
 	if !ok || len(raw) == 0 {
 		return state, nil
 	}
 
 	rawEntries := map[string]map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &rawEntries); err != nil {
-		return planner.ClientState{}, fmt.Errorf("decode mcpServers: %w", err)
+		return planner.ClientState{}, fmt.Errorf("decode %s: %w", topLevelKey, err)
 	}
 
 	for serverName, entry := range rawEntries {
@@ -81,10 +86,15 @@ func ReadStateFromMCPServers(doc JSONDocument, client string) (planner.ClientSta
 
 // WriteStateToMCPServers updates mcpServers while preserving unknown top-level keys.
 func WriteStateToMCPServers(path string, doc JSONDocument, desired planner.ClientState) error {
+	return WriteStateToServerMap(path, doc, "mcpServers", desired)
+}
+
+// WriteStateToServerMap updates a top-level server object while preserving unknown top-level keys.
+func WriteStateToServerMap(path string, doc JSONDocument, topLevelKey string, desired planner.ClientState) error {
 	existingServers := map[string]map[string]json.RawMessage{}
-	if raw, ok := doc["mcpServers"]; ok && len(raw) > 0 {
+	if raw, ok := doc[topLevelKey]; ok && len(raw) > 0 {
 		if err := json.Unmarshal(raw, &existingServers); err != nil {
-			return fmt.Errorf("decode existing mcpServers: %w", err)
+			return fmt.Errorf("decode existing %s: %w", topLevelKey, err)
 		}
 	}
 
@@ -156,9 +166,9 @@ func WriteStateToMCPServers(path string, doc JSONDocument, desired planner.Clien
 
 	raw, err := json.Marshal(nextServers)
 	if err != nil {
-		return fmt.Errorf("encode mcpServers: %w", err)
+		return fmt.Errorf("encode %s: %w", topLevelKey, err)
 	}
-	doc["mcpServers"] = raw
+	doc[topLevelKey] = raw
 
 	body, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {

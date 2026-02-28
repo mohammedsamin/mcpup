@@ -1,0 +1,7 @@
+{
+  "theme": "Ayu Light",
+  /* context_servers is intentionally absent */
+  "assistant": {
+    "mode": "chat"
+  }
+}

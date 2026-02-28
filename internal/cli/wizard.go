@@ -396,11 +396,17 @@ func (w *wizard) enableDisable() error {
 	}
 	serverName := serverNames[serverIdx]
 
-	actionIdx, err := output.Select(w.in, w.out, "Action:", []string{"Enable", "Disable"})
+	actionIdx, err := output.Select(w.in, w.out, "Action:", []string{
+		"Enable server",
+		"Disable server",
+		"Enable tools",
+		"Disable tools",
+	})
 	if err != nil {
 		return err
 	}
-	enable := actionIdx == 0
+	toolMode := actionIdx >= 2
+	enable := actionIdx == 0 || actionIdx == 2
 	action := "enable"
 	if !enable {
 		action = "disable"
@@ -414,6 +420,29 @@ func (w *wizard) enableDisable() error {
 		return fmt.Errorf("no clients selected")
 	}
 
+	var selectedTools []string
+	if toolMode {
+		toolOptions := wizardToolOptions(cfg, serverName, clientIndices)
+		if len(toolOptions) > 0 {
+			selected, selErr := output.MultiSelect(w.in, w.out, "Select tools:", toolOptions, nil)
+			if selErr != nil {
+				return selErr
+			}
+			for _, idx := range selected {
+				selectedTools = append(selectedTools, toolOptions[idx])
+			}
+		} else {
+			raw, inputErr := output.Input(w.in, w.out, "Tool names (comma-separated):", "")
+			if inputErr != nil {
+				return inputErr
+			}
+			selectedTools = splitCSV(raw)
+		}
+		if len(selectedTools) == 0 {
+			return fmt.Errorf("no tools selected")
+		}
+	}
+
 	reconciler, err := core.NewReconciler()
 	if err != nil {
 		return err
@@ -424,9 +453,23 @@ func (w *wizard) enableDisable() error {
 	for _, ci := range clientIndices {
 		client := store.SupportedClients[ci]
 
-		if err := store.SetClientServerEnabled(&cfg, client, serverName, enable); err != nil {
-			fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
-			continue
+		if toolMode {
+			toolErr := false
+			for _, tool := range selectedTools {
+				if err := store.SetClientToolEnabled(&cfg, client, serverName, tool, enable); err != nil {
+					fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
+					toolErr = true
+					break
+				}
+			}
+			if toolErr {
+				continue
+			}
+		} else {
+			if err := store.SetClientServerEnabled(&cfg, client, serverName, enable); err != nil {
+				fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
+				continue
+			}
 		}
 
 		desired, err := planner.DesiredStateForClient(cfg, client)
@@ -446,8 +489,14 @@ func (w *wizard) enableDisable() error {
 			continue
 		}
 
-		fmt.Fprintf(w.out, "  %s %sd %s on %s\n",
-			output.Green(output.SymbolOK), action, output.Bold(serverName), output.Cyan(client))
+		if toolMode {
+			fmt.Fprintf(w.out, "  %s %sd tools (%s) on %s (%s)\n",
+				output.Green(output.SymbolOK), action, strings.Join(selectedTools, ", "),
+				output.Bold(serverName), output.Cyan(client))
+		} else {
+			fmt.Fprintf(w.out, "  %s %sd %s on %s\n",
+				output.Green(output.SymbolOK), action, output.Bold(serverName), output.Cyan(client))
+		}
 		successes++
 	}
 
@@ -1016,8 +1065,57 @@ func clientTableHeaders() []string {
 			short = "CODEX"
 		case "opencode":
 			short = "OPENCODE"
+		case "windsurf":
+			short = "WINDSURF"
+		case "zed":
+			short = "ZED"
+		case "continue":
+			short = "CONTINUE"
 		}
 		headers = append(headers, short)
 	}
 	return headers
+}
+
+func wizardToolOptions(cfg store.Config, serverName string, clientIndices []int) []string {
+	seen := map[string]struct{}{}
+
+	if tmpl, ok := registry.Lookup(serverName); ok {
+		for _, tool := range tmpl.Tools {
+			tool = strings.TrimSpace(tool)
+			if tool != "" {
+				seen[tool] = struct{}{}
+			}
+		}
+	}
+
+	for _, ci := range clientIndices {
+		if ci < 0 || ci >= len(store.SupportedClients) {
+			continue
+		}
+		client := store.SupportedClients[ci]
+		state, ok := cfg.Clients[client].Servers[serverName]
+		if !ok {
+			continue
+		}
+		for _, tool := range state.EnabledTools {
+			tool = strings.TrimSpace(tool)
+			if tool != "" {
+				seen[tool] = struct{}{}
+			}
+		}
+		for _, tool := range state.DisabledTools {
+			tool = strings.TrimSpace(tool)
+			if tool != "" {
+				seen[tool] = struct{}{}
+			}
+		}
+	}
+
+	options := make([]string, 0, len(seen))
+	for tool := range seen {
+		options = append(options, tool)
+	}
+	sort.Strings(options)
+	return options
 }

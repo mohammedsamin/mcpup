@@ -19,7 +19,7 @@ mcpup is the config layer between your MCP servers and your AI clients. A single
 ## Three Pillars
 
 1. **One place** — All your MCP servers registered in one config (`~/.mcpup/`)
-2. **Every client** — Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Gemini CLI, Zed, OpenCode
+2. **Every client** — Claude Code, Claude Desktop, Cursor, Codex, OpenCode, Windsurf, Zed, Continue
 3. **Instant control** — `mcpup enable`, `mcpup disable`, `mcpup profile coding` — changes apply immediately
 
 ## Core Features
@@ -32,16 +32,16 @@ mcpup is the config layer between your MCP servers and your AI clients. A single
 - **Real config writes** — mcpup writes directly to each client's config files, no proxy layer
 - **Free and open source** — forever
 
-## Supported Clients (Target)
+## Supported Clients
 
 - Claude Code
 - Claude Desktop
 - Cursor
-- VS Code (Copilot)
-- Windsurf
-- Gemini CLI
-- Zed
+- Codex
 - OpenCode
+- Windsurf
+- Zed
+- Continue (VS Code extension)
 
 ## Example Usage
 
@@ -54,12 +54,12 @@ mcpup enable github --client cursor
 mcpup enable github --client claude-code
 
 # Disable it for one client
-mcpup disable github --client cursor
+mcpup disable github --client cursor --tool delete_issue
 
 # Create and switch profiles
 mcpup profile create coding --servers github,context7,postgres
 mcpup profile create writing --servers notion,brave-search
-mcpup profile coding    # instantly switches all clients
+mcpup profile apply coding --yes
 
 # See everything
 mcpup list              # all servers and their status per client
@@ -82,13 +82,16 @@ mcpup status            # which profile is active, what's enabled where
 - **Config format:** JSON — industry standard for MCP, consistent with every client's native format
 - **Install:** GitHub Releases (download one binary, run it — nothing else needed on the user's machine) + `go install` for Go devs. Curl script and Homebrew added later.
 
-## First Target Clients (v1)
+## v1 Clients
 
 - Claude Code — terminal devs, heaviest MCP users
 - Cursor — biggest AI editor, massive MCP adoption
 - Claude Desktop — most complained about config pain
 - Codex — OpenAI's CLI, growing fast
 - OpenCode — open source crowd, credibility
+- Windsurf — strong MCP usage in editor workflows
+- Zed — agent-mode MCP support
+- Continue — VS Code extension MCP support
 
 ## Who It's For
 

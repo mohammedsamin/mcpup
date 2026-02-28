@@ -33,6 +33,15 @@ mcpup add <name> [--env KEY=VALUE ...] [--description <text>]
 Adds a server definition in canonical config. Use `--update` to overwrite an existing server.
 If `--command` is omitted and `<name>` exists in the built-in registry, command/args are auto-filled.
 
+## update
+
+```bash
+mcpup update [server ...] [--yes]
+```
+
+Refreshes existing server definitions from the built-in registry (command, args, description).
+Only affects servers that already exist in your canonical config and are known in the registry.
+
 ## remove
 
 ```bash
@@ -66,6 +75,25 @@ mcpup status
 ```
 
 Shows active profile and high-level server status per client.
+
+## export
+
+```bash
+mcpup export [--servers a,b,c] [--output <path>]
+```
+
+Exports server definitions from canonical config to JSON.  
+Without `--output`, writes JSON to stdout.
+
+## import
+
+```bash
+mcpup import <file> [--overwrite] [--yes]
+```
+
+Imports server definitions from an export JSON file.
+- default: existing servers are skipped
+- with `--overwrite`: existing servers are replaced
 
 ## registry
 
@@ -114,6 +142,14 @@ mcpup clients list
 ```
 
 Prints v1 supported clients.
+
+## completion
+
+```bash
+mcpup completion <bash|zsh|fish>
+```
+
+Prints a shell completion script.
 
 ## doctor
 

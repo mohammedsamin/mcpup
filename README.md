@@ -159,6 +159,9 @@ mcpup add memory
 | **Claude Desktop** | JSON | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | **Codex** | TOML | `~/.codex/config.toml` |
 | **OpenCode** | JSON | `~/.config/opencode/opencode.json` |
+| **Windsurf** | JSON | `~/.codeium/windsurf/mcp_config.json` |
+| **Zed** | JSON/JSONC | `~/.zed/settings.json` (macOS), `~/.config/zed/settings.json` (Linux) |
+| **Continue (VS Code)** | JSON | `~/.continue/mcpServers/mcpup.json` |
 
 mcpup writes directly to each client's native config file. No proxy, no middleware, no daemon.
 
@@ -171,7 +174,10 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
         ├─→ ~/.cursor/mcp.json              (Cursor)
         ├─→ ~/Library/.../claude_desktop_config.json  (Claude Desktop)
         ├─→ ~/.codex/config.toml            (Codex)
-        └─→ ~/.config/opencode/opencode.json (OpenCode)
+        ├─→ ~/.config/opencode/opencode.json (OpenCode)
+        ├─→ ~/.codeium/windsurf/mcp_config.json (Windsurf)
+        ├─→ ~/.zed/settings.json            (Zed)
+        └─→ ~/.continue/mcpServers/mcpup.json (Continue)
 ```
 
 1. You define servers once in `~/.mcpup/config.json`
@@ -185,8 +191,11 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
 - **One config, all clients** — define a server once, enable it on any client
 - **Interactive wizard** — arrow-key menu for everything, no commands to memorize
 - **Built-in registry** — 19 popular servers with pre-filled commands and args
+- **Update command** — refresh registry-backed server definitions with `mcpup update`
+- **Export / Import** — share server packs with `mcpup export` and `mcpup import`
 - **Profiles** — switch between "work", "personal", "debug" setups in one command
 - **Per-tool control** — enable a server but disable specific tools on specific clients
+- **Shell completion** — generate completions for bash/zsh/fish
 - **Auto-backup** — every config write creates a timestamped backup
 - **Rollback** — restore any client config from any backup with one command
 - **Doctor** — diagnose config issues, missing executables, permission problems
@@ -202,11 +211,15 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
 | `mcpup` | Launch interactive wizard |
 | `mcpup init [--import]` | Initialize config (optionally import existing) |
 | `mcpup add <name>` | Add server (from registry or custom with `--command`) |
+| `mcpup update [name...]` | Refresh registry-backed server definitions |
 | `mcpup remove <name>` | Remove a server |
 | `mcpup enable <name> --client <c>` | Enable server on a client |
 | `mcpup disable <name> --client <c>` | Disable server on a client |
 | `mcpup list [--client <c>]` | List configured servers |
 | `mcpup status` | Show overview of all clients |
+| `mcpup export [--servers a,b]` | Export server definitions as JSON |
+| `mcpup import <file>` | Import server definitions from JSON |
+| `mcpup completion <shell>` | Generate shell completion script |
 | `mcpup registry [query]` | Browse built-in server catalog |
 | `mcpup profile create <n> --servers a,b` | Create a profile |
 | `mcpup profile apply <name>` | Apply profile to all clients |
@@ -286,6 +299,9 @@ internal/
     claudedesktop/  → Claude Desktop adapter (JSON)
     codex/          → Codex adapter (TOML)
     opencode/       → OpenCode adapter (JSON)
+    windsurf/       → Windsurf adapter (JSON)
+    zed/            → Zed adapter (JSON/JSONC)
+    continuedev/    → Continue adapter (JSON)
   profile/          → profile create/apply/delete
   backup/           → snapshot + restore + retention
   validate/         → doctor diagnostics

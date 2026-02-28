@@ -43,7 +43,7 @@ Env values support:
 
 ## `clients`
 
-Map key: client name (`claude-code`, `cursor`, `claude-desktop`, `codex`, `opencode`)
+Map key: client name (`claude-code`, `cursor`, `claude-desktop`, `codex`, `opencode`, `windsurf`, `zed`, `continue`)
 
 Each client stores per-server state:
 
@@ -91,4 +91,3 @@ Rules:
 
 - Optional string.
 - If set, it must reference an existing profile key.
-

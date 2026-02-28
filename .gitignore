@@ -4,3 +4,5 @@ bin/
 *.dll
 *.so
 *.dylib
+.DS_Store
+**/.DS_Store

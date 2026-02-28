@@ -17,6 +17,7 @@ type Template struct {
 	Name        string   `json:"name"`
 	Command     string   `json:"command"`
 	Args        []string `json:"args"`
+	Tools       []string `json:"tools,omitempty"`
 	EnvVars     []EnvVar `json:"envVars,omitempty"`
 	Description string   `json:"description"`
 	Category    string   `json:"category"`
@@ -29,6 +30,7 @@ var catalog = []Template{
 		Name:        "github",
 		Command:     "npx",
 		Args:        []string{"-y", "@modelcontextprotocol/server-github"},
+		Tools:       []string{"search_repositories", "search_code", "search_issues", "search_pull_requests", "create_issue", "create_pull_request"},
 		EnvVars:     []EnvVar{{Key: "GITHUB_TOKEN", Required: true, Hint: "https://github.com/settings/tokens"}},
 		Description: "GitHub - search repos, issues, PRs, create branches",
 		Category:    "developer",
@@ -75,27 +77,28 @@ var catalog = []Template{
 		Category:    "search",
 	},
 	{
-		Name:    "context7",
-		Command: "npx",
-		Args:    []string{"-y", "@upstash/context7-mcp"},
+		Name:        "context7",
+		Command:     "npx",
+		Args:        []string{"-y", "@upstash/context7-mcp"},
 		Description: "Context7 - up-to-date docs for any library",
 		Category:    "search",
 	},
 
 	// ── Productivity ─────────────────────────────────────────────────────
 	{
-		Name:    "notion",
-		Command: "npx",
-		Args:    []string{"-y", "@notionhq/notion-mcp-server"},
-		EnvVars: []EnvVar{{Key: "OPENAPI_MCP_HEADERS", Required: true, Hint: "JSON: {\"Authorization\":\"Bearer ntn_xxx\",\"Notion-Version\":\"2022-06-28\"}"}},
+		Name:        "notion",
+		Command:     "npx",
+		Args:        []string{"-y", "@notionhq/notion-mcp-server"},
+		EnvVars:     []EnvVar{{Key: "OPENAPI_MCP_HEADERS", Required: true, Hint: "JSON: {\"Authorization\":\"Bearer ntn_xxx\",\"Notion-Version\":\"2022-06-28\"}"}},
 		Description: "Notion - search and manage pages, databases",
 		Category:    "productivity",
 	},
 	{
-		Name:    "slack",
-		Command: "npx",
-		Args:    []string{"-y", "@modelcontextprotocol/server-slack"},
-		EnvVars: []EnvVar{{Key: "SLACK_BOT_TOKEN", Required: true, Hint: "xoxb-... from https://api.slack.com/apps"}},
+		Name:        "slack",
+		Command:     "npx",
+		Args:        []string{"-y", "@modelcontextprotocol/server-slack"},
+		Tools:       []string{"list_channels", "post_message", "read_thread"},
+		EnvVars:     []EnvVar{{Key: "SLACK_BOT_TOKEN", Required: true, Hint: "xoxb-... from https://api.slack.com/apps"}},
 		Description: "Slack - read/send messages, manage channels",
 		Category:    "productivity",
 	},
@@ -113,6 +116,7 @@ var catalog = []Template{
 		Name:        "filesystem",
 		Command:     "npx",
 		Args:        []string{"-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"},
+		Tools:       []string{"list_directory", "read_file", "write_file", "search_files"},
 		Description: "Filesystem - read, write, search files in allowed directories",
 		Category:    "utility",
 	},
@@ -133,18 +137,18 @@ var catalog = []Template{
 
 	// ── Databases ────────────────────────────────────────────────────────
 	{
-		Name:    "postgres",
-		Command: "npx",
-		Args:    []string{"-y", "@modelcontextprotocol/server-postgres"},
-		EnvVars: []EnvVar{{Key: "POSTGRES_CONNECTION_STRING", Required: true, Hint: "postgresql://user:pass@host:5432/dbname"}},
+		Name:        "postgres",
+		Command:     "npx",
+		Args:        []string{"-y", "@modelcontextprotocol/server-postgres"},
+		EnvVars:     []EnvVar{{Key: "POSTGRES_CONNECTION_STRING", Required: true, Hint: "postgresql://user:pass@host:5432/dbname"}},
 		Description: "PostgreSQL - query and explore databases",
 		Category:    "database",
 	},
 	{
-		Name:    "supabase",
-		Command: "npx",
-		Args:    []string{"-y", "@supabase/mcp-server"},
-		EnvVars: []EnvVar{{Key: "SUPABASE_ACCESS_TOKEN", Required: true, Hint: "https://supabase.com/dashboard/account/tokens"}},
+		Name:        "supabase",
+		Command:     "npx",
+		Args:        []string{"-y", "@supabase/mcp-server"},
+		EnvVars:     []EnvVar{{Key: "SUPABASE_ACCESS_TOKEN", Required: true, Hint: "https://supabase.com/dashboard/account/tokens"}},
 		Description: "Supabase - manage projects, tables, edge functions",
 		Category:    "database",
 	},
@@ -167,18 +171,18 @@ var catalog = []Template{
 
 	// ── AI & Media ───────────────────────────────────────────────────────
 	{
-		Name:    "everart",
-		Command: "npx",
-		Args:    []string{"-y", "@modelcontextprotocol/server-everart"},
-		EnvVars: []EnvVar{{Key: "EVERART_API_KEY", Required: true, Hint: "https://everart.ai"}},
+		Name:        "everart",
+		Command:     "npx",
+		Args:        []string{"-y", "@modelcontextprotocol/server-everart"},
+		EnvVars:     []EnvVar{{Key: "EVERART_API_KEY", Required: true, Hint: "https://everart.ai"}},
 		Description: "EverArt - AI image generation",
 		Category:    "media",
 	},
 	{
-		Name:    "elevenlabs",
-		Command: "npx",
-		Args:    []string{"-y", "@anthropic/mcp-elevenlabs"},
-		EnvVars: []EnvVar{{Key: "ELEVENLABS_API_KEY", Required: true, Hint: "https://elevenlabs.io/app/settings/api-keys"}},
+		Name:        "elevenlabs",
+		Command:     "npx",
+		Args:        []string{"-y", "@anthropic/mcp-elevenlabs"},
+		EnvVars:     []EnvVar{{Key: "ELEVENLABS_API_KEY", Required: true, Hint: "https://elevenlabs.io/app/settings/api-keys"}},
 		Description: "ElevenLabs - text-to-speech, voice generation",
 		Category:    "media",
 	},

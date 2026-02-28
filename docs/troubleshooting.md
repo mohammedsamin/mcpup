@@ -25,7 +25,7 @@ Cause: unsupported `--client` value.
 Fix:
 
 - run `mcpup clients list`
-- use one of: `claude-code`, `cursor`, `claude-desktop`, `codex`, `opencode`
+- use one of: `claude-code`, `cursor`, `claude-desktop`, `codex`, `opencode`, `windsurf`, `zed`, `continue`
 
 ## `doctor detected failure checks`
 

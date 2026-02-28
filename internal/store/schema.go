@@ -10,6 +10,9 @@ var SupportedClients = []string{
 	"claude-desktop",
 	"codex",
 	"opencode",
+	"windsurf",
+	"zed",
+	"continue",
 }
 
 // Config is the canonical mcpup state stored in ~/.mcpup/config.json.

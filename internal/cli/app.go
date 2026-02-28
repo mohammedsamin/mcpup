@@ -59,6 +59,8 @@ func Run(args []string, in *os.File, out io.Writer, errOut io.Writer) error {
 		return runInit(opts, commandArgs, out)
 	case "add":
 		return runAdd(opts, commandArgs, out)
+	case "update":
+		return runUpdate(opts, commandArgs, in, out)
 	case "remove":
 		return runRemove(opts, commandArgs, in, out)
 	case "enable":
@@ -79,6 +81,14 @@ func Run(args []string, in *os.File, out io.Writer, errOut io.Writer) error {
 		return runRollback(opts, commandArgs, out)
 	case "registry":
 		return runRegistry(opts, commandArgs, out)
+	case "export":
+		return runExport(opts, commandArgs, out)
+	case "import":
+		return runImport(opts, commandArgs, in, out)
+	case "completion":
+		return runCompletion(commandArgs, out)
+	case "__complete":
+		return runInternalComplete(commandArgs, out)
 	default:
 		if suggestion := suggestCommand(command); suggestion != "" {
 			return fmt.Errorf("%w: unknown command %q — did you mean %q?", errUsage, command, suggestion)
@@ -1119,11 +1129,15 @@ func printRootHelp(out io.Writer) {
 	fmt.Fprintf(out, "%s\n", output.Bold("Commands:"))
 	helpLine(out, "init", "Initialize canonical config")
 	helpLine(out, "add", "Add an MCP server definition")
+	helpLine(out, "update", "Refresh server definitions from registry")
 	helpLine(out, "remove", "Remove a server definition")
 	helpLine(out, "enable", "Enable a server on a client")
 	helpLine(out, "disable", "Disable a server on a client")
 	helpLine(out, "list", "List configured servers")
 	helpLine(out, "status", "Show overall status")
+	helpLine(out, "export", "Export server definitions to JSON")
+	helpLine(out, "import", "Import server definitions from JSON")
+	helpLine(out, "completion", "Generate shell completion script")
 	helpLine(out, "profile", "Manage profiles (create|apply|list|delete)")
 	helpLine(out, "clients", "List supported clients")
 	helpLine(out, "doctor", "Run diagnostics")
@@ -1317,8 +1331,9 @@ func currentWorkspace() string {
 }
 
 var knownCommands = []string{
-	"init", "add", "remove", "enable", "disable",
-	"list", "status", "profile", "clients", "doctor", "rollback", "registry",
+	"init", "add", "update", "remove", "enable", "disable",
+	"list", "status", "export", "import", "completion",
+	"profile", "clients", "doctor", "rollback", "registry",
 }
 
 // suggestCommand returns the closest known command to input, or "" if none is close enough.

@@ -37,3 +37,22 @@ mcpup --dry-run profile apply coding
 mcpup doctor
 mcpup rollback --client cursor
 ```
+
+## Update from registry
+
+```bash
+mcpup update --yes
+```
+
+## Export and import
+
+```bash
+mcpup export --output team-pack.json
+mcpup import team-pack.json
+```
+
+## Shell completion
+
+```bash
+mcpup completion zsh > ~/.zsh/completions/_mcpup
+```

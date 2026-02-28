@@ -39,6 +39,29 @@
   - `~/.config/opencode/opencode.json`
 - Reads/writes nested `mcp.servers` object.
 
+## Windsurf (`windsurf`)
+
+- Detect path order:
+  - `<workspace>/.codeium/windsurf/mcp_config.json`
+  - `~/.codeium/windsurf/mcp_config.json`
+- Reads/writes top-level `mcpServers` object.
+
+## Zed (`zed`)
+
+- Detect path by OS:
+  - macOS: `~/.zed/settings.json`
+  - Linux: `$XDG_CONFIG_HOME/zed/settings.json` or `~/.config/zed/settings.json`
+  - Windows: `%APPDATA%/Zed/settings.json`
+- Reads/writes top-level `context_servers` object.
+- Supports JSONC input (comments are allowed on read; writes are normalized JSON).
+
+## Continue (`continue`)
+
+- Detect path order:
+  - `<workspace>/.continue/mcpServers/mcpup.json`
+  - `~/.continue/mcpServers/mcpup.json`
+- Reads/writes top-level `mcpServers` object in a JSON-compatible managed file.
+
 ## Preservation Policy
 
 For JSON-based adapters, unknown keys are preserved at top-level and server-level where feasible.

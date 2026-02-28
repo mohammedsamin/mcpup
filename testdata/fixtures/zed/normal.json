@@ -1,0 +1,20 @@
+{
+  // keep this comment to verify JSONC parsing
+  "theme": "Ayu",
+  "context_servers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "enabled": false,
+      "zedOnly": true
+    },
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "enabled": true
+    }
+  },
+  "assistant": {
+    "mode": "agent"
+  }
+}
