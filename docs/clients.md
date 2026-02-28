@@ -4,7 +4,7 @@
 
 - Detect path order:
   - `<workspace>/.mcp.json`
-  - `~/.claude.json`
+  - `~/.claude/settings.json`
 - Reads/writes top-level `mcpServers` object.
 
 ## Cursor (`cursor`)

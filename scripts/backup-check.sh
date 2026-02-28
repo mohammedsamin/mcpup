@@ -25,7 +25,7 @@ JSON
 "$BIN" enable github --client cursor
 "$BIN" disable github --client cursor --tool delete_issue
 "$BIN" profile create coding --servers github
-"$BIN" profile apply coding
+"$BIN" profile apply coding --yes
 
 BACKUP_DIR="$HOME/.mcpup/backups/cursor"
 if [[ ! -d "$BACKUP_DIR" ]]; then

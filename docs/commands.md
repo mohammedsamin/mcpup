@@ -5,7 +5,15 @@
 - `--dry-run`: plan actions but do not write files.
 - `--json`: output machine-readable JSON.
 - `--verbose`: include detailed command data.
-- `--yes`: reserved for non-interactive confirmation workflows.
+- `--yes`: skip interactive confirmations for destructive or multi-client actions.
+
+## interactive mode
+
+```bash
+mcpup
+```
+
+When run with no arguments in an interactive terminal, `mcpup` opens the menu wizard.
 
 ## init
 
@@ -19,9 +27,11 @@ Creates canonical config if missing. With `--import`, imports discovered client 
 
 ```bash
 mcpup add <name> --command <cmd> [--arg <arg> ...] [--env KEY=VALUE ...] [--description <text>]
+mcpup add <name> [--env KEY=VALUE ...] [--description <text>]
 ```
 
-Adds or updates server definition in canonical config.
+Adds a server definition in canonical config. Use `--update` to overwrite an existing server.
+If `--command` is omitted and `<name>` exists in the built-in registry, command/args are auto-filled.
 
 ## remove
 
@@ -29,7 +39,7 @@ Adds or updates server definition in canonical config.
 mcpup remove <name>
 ```
 
-Removes server definition and related client/profile references (idempotent).
+Removes server definition and related client/profile references.
 
 ## enable / disable
 
@@ -57,6 +67,14 @@ mcpup status
 
 Shows active profile and high-level server status per client.
 
+## registry
+
+```bash
+mcpup registry [query]
+```
+
+Lists built-in server templates. With an optional query, filters by name, description, or category.
+
 ## profile create
 
 ```bash
@@ -68,7 +86,7 @@ Creates or updates a profile after server validation.
 ## profile apply
 
 ```bash
-mcpup profile apply <name>
+mcpup profile apply <name> [--client <client> ...] [--yes]
 ```
 
 Applies profile across all supported clients through the reconciler. Supports dry-run preview and rollback behavior on partial failure.

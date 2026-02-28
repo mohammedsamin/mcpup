@@ -22,7 +22,7 @@ mkdir -p "$HOME"
 "$BIN" enable github --client cursor
 "$BIN" disable github --client cursor --tool delete_issue
 "$BIN" profile create coding --servers github
-"$BIN" profile apply coding
+"$BIN" profile apply coding --yes
 "$BIN" doctor
 "$BIN" rollback --client cursor
 

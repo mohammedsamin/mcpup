@@ -17,12 +17,13 @@ export MCPUP_CONFIG="$TMP_DIR/config.json"
 mkdir -p "$HOME"
 
 mkdir -p "$HOME/.cursor"
+mkdir -p "$HOME/.claude"
 mkdir -p "$HOME/.codex"
 mkdir -p "$HOME/.config/opencode"
 mkdir -p "$HOME/Library/Application Support/Claude"
 
 cp "$ROOT_DIR/testdata/fixtures/cursor/normal.json" "$HOME/.cursor/mcp.json"
-cp "$ROOT_DIR/testdata/fixtures/claudecode/normal.json" "$HOME/.claude.json"
+cp "$ROOT_DIR/testdata/fixtures/claudecode/normal.json" "$HOME/.claude/settings.json"
 cp "$ROOT_DIR/testdata/fixtures/claudedesktop/normal.json" "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 cp "$ROOT_DIR/testdata/fixtures/codex/normal.toml" "$HOME/.codex/config.toml"
 cp "$ROOT_DIR/testdata/fixtures/opencode/normal.json" "$HOME/.config/opencode/opencode.json"
@@ -39,7 +40,7 @@ cp "$ROOT_DIR/testdata/fixtures/opencode/normal.json" "$HOME/.config/opencode/op
 "$BIN" disable github --client cursor --tool delete_issue
 "$BIN" --dry-run profile create coding --servers github
 "$BIN" profile create coding --servers github
-"$BIN" --dry-run profile apply coding
+"$BIN" --dry-run profile apply coding --yes
 "$BIN" --json doctor
 
 echo "smoke-cross-client: OK"
