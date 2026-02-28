@@ -133,6 +133,14 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 		cfg.Servers[c.Name] = srv
 	}
 
+	// Persist canonical desired state before reconciliation to avoid drift if
+	// a later client reconcile fails after partially applying changes.
+	if !opts.DryRun {
+		if err := store.SaveConfig(path, cfg); err != nil {
+			return err
+		}
+	}
+
 	updatedNames := map[string]struct{}{}
 	for _, c := range candidates {
 		updatedNames[c.Name] = struct{}{}
@@ -165,12 +173,6 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 			return recErr
 		}
 		clientResults = append(clientResults, result)
-	}
-
-	if !opts.DryRun {
-		if err := store.SaveConfig(path, cfg); err != nil {
-			return err
-		}
 	}
 
 	message := fmt.Sprintf("%d server definition(s) %s", len(candidates), ternary(opts.DryRun, "would be updated", "updated"))

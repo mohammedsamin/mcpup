@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -1043,7 +1044,11 @@ func loadConfigOrDefault() (store.Config, error) {
 	}
 	cfg, err := store.LoadConfig(path)
 	if err != nil {
-		return store.NewDefaultConfig(), nil
+		var serr *store.StoreError
+		if errors.As(err, &serr) && serr.Kind == store.KindNotFound {
+			return store.NewDefaultConfig(), nil
+		}
+		return store.Config{}, err
 	}
 	return cfg, nil
 }

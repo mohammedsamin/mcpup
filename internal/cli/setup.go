@@ -131,6 +131,14 @@ func runSetup(opts GlobalOptions, args []string, in *os.File, out io.Writer) err
 		}
 	}
 
+	// Persist canonical desired state before reconciliation to avoid drift if
+	// a later client reconcile fails after partially applying changes.
+	if !opts.DryRun {
+		if err := store.SaveConfig(path, cfg); err != nil {
+			return err
+		}
+	}
+
 	clientResults := make([]core.ReconcileResult, 0, len(clients))
 	for _, client := range clients {
 		desired, err := planner.DesiredStateForClient(cfg, client)
@@ -148,12 +156,6 @@ func runSetup(opts GlobalOptions, args []string, in *os.File, out io.Writer) err
 			return err
 		}
 		clientResults = append(clientResults, result)
-	}
-
-	if !opts.DryRun {
-		if err := store.SaveConfig(path, cfg); err != nil {
-			return err
-		}
 	}
 
 	return printResult(out, opts, output.Result{
