@@ -15,6 +15,7 @@ import (
 	"github.com/mohammedsamin/mcpup/internal/output"
 	"github.com/mohammedsamin/mcpup/internal/planner"
 	"github.com/mohammedsamin/mcpup/internal/profile"
+	"github.com/mohammedsamin/mcpup/internal/registry"
 	"github.com/mohammedsamin/mcpup/internal/store"
 	"github.com/mohammedsamin/mcpup/internal/validate"
 )
@@ -76,6 +77,8 @@ func Run(args []string, in *os.File, out io.Writer, errOut io.Writer) error {
 		return runDoctor(opts, commandArgs, out)
 	case "rollback":
 		return runRollback(opts, commandArgs, out)
+	case "registry":
+		return runRegistry(opts, commandArgs, out)
 	default:
 		if suggestion := suggestCommand(command); suggestion != "" {
 			return fmt.Errorf("%w: unknown command %q — did you mean %q?", errUsage, command, suggestion)
@@ -225,8 +228,39 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("%w: add requires exactly one positional argument: <name>", errUsage)
 	}
+	// When --command is not provided, check the built-in registry.
 	if strings.TrimSpace(*command) == "" {
-		return fmt.Errorf("%w: add requires --command", errUsage)
+		tmpl, found := registry.Lookup(fs.Arg(0))
+		if !found {
+			return fmt.Errorf("%w: add requires --command (server %q is not in the built-in registry)", errUsage, fs.Arg(0))
+		}
+		*command = tmpl.Command
+		if len(cmdArgs) == 0 {
+			cmdArgs = repeatedFlag(tmpl.Args)
+		}
+		if strings.TrimSpace(*description) == "" {
+			*description = tmpl.Description
+		}
+		// Validate that required env vars are provided.
+		for _, ev := range tmpl.EnvVars {
+			if ev.Required {
+				found := false
+				for _, kv := range envVars {
+					key, _, _ := strings.Cut(kv, "=")
+					if strings.TrimSpace(key) == ev.Key {
+						found = true
+						break
+					}
+				}
+				if !found {
+					hint := ""
+					if ev.Hint != "" {
+						hint = fmt.Sprintf(" (get it from %s)", ev.Hint)
+					}
+					return fmt.Errorf("%w: server %q requires --%s %s=<value>%s", errUsage, fs.Arg(0), "env", ev.Key, hint)
+				}
+			}
+		}
 	}
 
 	envMap := map[string]string{}
@@ -1036,6 +1070,46 @@ func runRollback(opts GlobalOptions, args []string, out io.Writer) error {
 	})
 }
 
+func runRegistry(opts GlobalOptions, args []string, out io.Writer) error {
+	if hasHelp(args) {
+		fmt.Fprintln(out, "Usage: mcpup registry [search-term]")
+		return nil
+	}
+
+	query := ""
+	if len(args) > 0 {
+		query = strings.Join(args, " ")
+	}
+
+	templates := registry.Search(query)
+
+	if opts.JSON {
+		return printResult(out, opts, output.Result{
+			Command: "registry",
+			Status:  "ok",
+			Message: fmt.Sprintf("%d servers found", len(templates)),
+			Data: map[string]any{
+				"query":   query,
+				"count":   len(templates),
+				"servers": templates,
+			},
+		})
+	}
+
+	if len(templates) == 0 {
+		fmt.Fprintf(out, "%s No servers found matching %q\n", output.Dim(output.SymbolArrow), query)
+		return nil
+	}
+
+	tbl := &output.Table{Headers: []string{"NAME", "CATEGORY", "DESCRIPTION"}}
+	for _, t := range templates {
+		tbl.AddRow(t.Name, t.Category, t.Description)
+	}
+	tbl.Render(out)
+	fmt.Fprintf(out, "\n%s Add with: %s\n", output.Dim(output.SymbolArrow), output.Bold("mcpup add <name>"))
+	return nil
+}
+
 func printRootHelp(out io.Writer) {
 	fmt.Fprintf(out, "%s - MCP configuration manager\n", output.Bold("mcpup"))
 	fmt.Fprintln(out)
@@ -1054,6 +1128,7 @@ func printRootHelp(out io.Writer) {
 	helpLine(out, "clients", "List supported clients")
 	helpLine(out, "doctor", "Run diagnostics")
 	helpLine(out, "rollback", "Restore from backup")
+	helpLine(out, "registry", "Browse built-in server catalog")
 }
 
 func helpLine(out io.Writer, cmd, desc string) {
@@ -1243,7 +1318,7 @@ func currentWorkspace() string {
 
 var knownCommands = []string{
 	"init", "add", "remove", "enable", "disable",
-	"list", "status", "profile", "clients", "doctor", "rollback",
+	"list", "status", "profile", "clients", "doctor", "rollback", "registry",
 }
 
 // suggestCommand returns the closest known command to input, or "" if none is close enough.

@@ -12,6 +12,7 @@ import (
 	"github.com/mohammedsamin/mcpup/internal/output"
 	"github.com/mohammedsamin/mcpup/internal/planner"
 	"github.com/mohammedsamin/mcpup/internal/profile"
+	"github.com/mohammedsamin/mcpup/internal/registry"
 	"github.com/mohammedsamin/mcpup/internal/store"
 	"github.com/mohammedsamin/mcpup/internal/validate"
 )
@@ -27,6 +28,11 @@ func runWizard(in *os.File, out io.Writer) error {
 	w := &wizard{in: in, out: out}
 	w.printBanner()
 
+	// First-run: offer to init + import if no config exists.
+	if err := w.maybeInit(); err != nil {
+		return err
+	}
+
 	for {
 		action, err := w.mainMenu()
 		if err != nil {
@@ -37,19 +43,23 @@ func runWizard(in *os.File, out io.Writer) error {
 		switch action {
 		case 0: // Add Server
 			runErr = w.addServer()
-		case 1: // Enable / Disable
+		case 1: // Remove Server
+			runErr = w.removeServer()
+		case 2: // Enable / Disable
 			runErr = w.enableDisable()
-		case 2: // List Servers
+		case 3: // List Servers
 			runErr = w.listServers()
-		case 3: // Status
+		case 4: // Browse Registry
+			runErr = w.browseRegistry()
+		case 5: // Status
 			runErr = w.showStatus()
-		case 4: // Profiles
+		case 6: // Profiles
 			runErr = w.profileMenu()
-		case 5: // Doctor
+		case 7: // Doctor
 			runErr = w.runDoctor()
-		case 6: // Rollback
+		case 8: // Rollback
 			runErr = w.rollback()
-		case 7: // Exit
+		case 9: // Exit
 			fmt.Fprintf(out, "\n%s Goodbye!\n", output.Dim(output.SymbolArrow))
 			return nil
 		}
@@ -72,8 +82,10 @@ func (w *wizard) printBanner() {
 func (w *wizard) mainMenu() (int, error) {
 	return output.Select(w.in, w.out, "What would you like to do?", []string{
 		"Add a server",
+		"Remove a server",
 		"Enable / Disable a server",
 		"List servers",
+		"Browse server registry",
 		"Status overview",
 		"Profiles",
 		"Run doctor",
@@ -82,11 +94,155 @@ func (w *wizard) mainMenu() (int, error) {
 	})
 }
 
+// ─── Init ────────────────────────────────────────────────────────────────────
+
+func (w *wizard) maybeInit() error {
+	path, err := store.ResolveConfigPath("")
+	if err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(path); statErr == nil {
+		return nil // config exists, skip init
+	}
+
+	fmt.Fprintf(w.out, "  %s No config found. Let's set things up.\n\n", output.Yellow(output.SymbolWarn))
+
+	importExisting, err := output.Confirm(w.in, w.out, "Import servers from your existing AI clients?", true)
+	if err != nil {
+		return err
+	}
+
+	_, cfg, err := store.EnsureConfig("")
+	if err != nil {
+		return err
+	}
+
+	if importExisting {
+		reconciler, recErr := core.NewReconciler()
+		if recErr != nil {
+			return recErr
+		}
+		workspace, _ := os.Getwd()
+		clients, servers, importErr := importClientStates(&cfg, reconciler, workspace)
+		if importErr != nil {
+			return importErr
+		}
+		if err := store.SaveConfig(path, cfg); err != nil {
+			return err
+		}
+		if servers > 0 {
+			fmt.Fprintf(w.out, "\n  %s Imported %d servers from %d clients\n\n",
+				output.Green(output.SymbolOK), servers, clients)
+		} else {
+			fmt.Fprintf(w.out, "\n  %s No existing servers found — you can add them below\n\n",
+				output.Dim(output.SymbolArrow))
+		}
+	} else {
+		fmt.Fprintf(w.out, "\n  %s Config initialized at %s\n\n",
+			output.Green(output.SymbolOK), output.Dim(path))
+	}
+	return nil
+}
+
 // ─── Add Server ──────────────────────────────────────────────────────────────
 
 func (w *wizard) addServer() error {
 	fmt.Fprintf(w.out, "\n%s\n", output.Bold("Add a new MCP server"))
 
+	modeIdx, err := output.Select(w.in, w.out, "How would you like to add?", []string{
+		"Pick from registry",
+		"Custom server",
+	})
+	if err != nil {
+		return err
+	}
+
+	if modeIdx == 0 {
+		return w.addFromRegistry()
+	}
+	return w.addCustomServer()
+}
+
+func (w *wizard) addFromRegistry() error {
+	templates := registry.All()
+	options := make([]string, len(templates))
+	for i, t := range templates {
+		options[i] = fmt.Sprintf("%-18s %s", t.Name, output.Dim(t.Description))
+	}
+
+	idx, err := output.Select(w.in, w.out, "Select a server:", options)
+	if err != nil {
+		return err
+	}
+	tmpl := templates[idx]
+
+	// Collect required env vars.
+	envMap := map[string]string{}
+	for _, ev := range tmpl.EnvVars {
+		label := ev.Key
+		if ev.Hint != "" {
+			label += output.Dim("  " + ev.Hint)
+		}
+		if ev.Required {
+			label += output.Red(" (required)")
+		}
+		val, err := output.Input(w.in, w.out, label+":", "")
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(val) != "" {
+			envMap[ev.Key] = strings.TrimSpace(val)
+		} else if ev.Required {
+			return fmt.Errorf("%s is required for %s", ev.Key, tmpl.Name)
+		}
+	}
+
+	path, cfg, err := store.EnsureConfig("")
+	if err != nil {
+		return err
+	}
+
+	server := store.Server{
+		Command:     tmpl.Command,
+		Args:        tmpl.Args,
+		Env:         envMap,
+		Description: tmpl.Description,
+	}
+
+	if err := store.AddServer(&cfg, tmpl.Name, server); err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			confirmed, cErr := output.Confirm(w.in, w.out, fmt.Sprintf("Server %q already exists. Overwrite?", tmpl.Name), false)
+			if cErr != nil {
+				return cErr
+			}
+			if !confirmed {
+				return fmt.Errorf("aborted")
+			}
+			if err := store.UpsertServer(&cfg, tmpl.Name, server); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	if err := store.SaveConfig(path, cfg); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w.out, "\n%s Server %s added\n", output.Green(output.SymbolOK), output.Bold(tmpl.Name))
+
+	enableNow, err := output.Confirm(w.in, w.out, "Enable on clients now?", true)
+	if err != nil {
+		return err
+	}
+	if enableNow {
+		return w.enableServerOnClients(tmpl.Name)
+	}
+	return nil
+}
+
+func (w *wizard) addCustomServer() error {
 	name, err := output.Input(w.in, w.out, "Server name:", "")
 	if err != nil {
 		return err
@@ -112,7 +268,6 @@ func (w *wizard) addServer() error {
 		args = strings.Fields(argsStr)
 	}
 
-	// Env vars loop.
 	envMap := map[string]string{}
 	for {
 		envStr, envErr := output.Input(w.in, w.out, "Environment variable (KEY=VALUE, or empty to skip):", "")
@@ -135,7 +290,6 @@ func (w *wizard) addServer() error {
 		return err
 	}
 
-	// Save to config.
 	path, cfg, err := store.EnsureConfig("")
 	if err != nil {
 		return err
@@ -171,7 +325,6 @@ func (w *wizard) addServer() error {
 
 	fmt.Fprintf(w.out, "\n%s Server %s added\n", output.Green(output.SymbolOK), output.Bold(name))
 
-	// Offer to enable on clients.
 	enableNow, err := output.Confirm(w.in, w.out, "Enable on clients now?", true)
 	if err != nil {
 		return err
@@ -179,6 +332,46 @@ func (w *wizard) addServer() error {
 	if enableNow {
 		return w.enableServerOnClients(name)
 	}
+	return nil
+}
+
+// ─── Remove Server ───────────────────────────────────────────────────────────
+
+func (w *wizard) removeServer() error {
+	path, cfg, err := store.EnsureConfig("")
+	if err != nil {
+		return err
+	}
+
+	serverNames := sortedServerNames(cfg)
+	if len(serverNames) == 0 {
+		return fmt.Errorf("no servers to remove")
+	}
+
+	fmt.Fprintf(w.out, "\n%s\n", output.Bold("Remove a server"))
+
+	idx, err := output.Select(w.in, w.out, "Select a server to remove:", serverNames)
+	if err != nil {
+		return err
+	}
+	name := serverNames[idx]
+
+	confirmed, err := output.Confirm(w.in, w.out, fmt.Sprintf("Remove %q? This cannot be undone.", name), false)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		return fmt.Errorf("aborted")
+	}
+
+	if err := store.RemoveServer(&cfg, name); err != nil {
+		return err
+	}
+	if err := store.SaveConfig(path, cfg); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w.out, "\n%s Server %s removed\n", output.Green(output.SymbolOK), output.Bold(name))
 	return nil
 }
 
@@ -267,7 +460,6 @@ func (w *wizard) enableDisable() error {
 	return nil
 }
 
-// enableServerOnClients is the quick-enable flow after adding a server.
 func (w *wizard) enableServerOnClients(serverName string) error {
 	clientIndices, err := output.MultiSelect(w.in, w.out, "Select clients to enable on:", store.SupportedClients, nil)
 	if err != nil {
@@ -370,6 +562,49 @@ func (w *wizard) listServers() error {
 	tbl2.Render(w.out)
 
 	return nil
+}
+
+// ─── Browse Registry ─────────────────────────────────────────────────────────
+
+func (w *wizard) browseRegistry() error {
+	fmt.Fprintf(w.out, "\n%s\n", output.Bold("Server Registry"))
+
+	categories := registry.Categories()
+	options := append([]string{"All servers"}, categories...)
+
+	catIdx, err := output.Select(w.in, w.out, "Browse by category:", options)
+	if err != nil {
+		return err
+	}
+
+	var templates []registry.Template
+	if catIdx == 0 {
+		templates = registry.All()
+	} else {
+		templates = registry.ByCategory(categories[catIdx-1])
+	}
+
+	if len(templates) == 0 {
+		fmt.Fprintf(w.out, "\n%s No servers in this category\n", output.Dim(output.SymbolArrow))
+		return nil
+	}
+
+	fmt.Fprintln(w.out)
+	tbl := &output.Table{Headers: []string{"NAME", "CATEGORY", "DESCRIPTION"}}
+	for _, t := range templates {
+		tbl.AddRow(t.Name, t.Category, t.Description)
+	}
+	tbl.Render(w.out)
+
+	addOne, err := output.Confirm(w.in, w.out, "Add one of these servers?", true)
+	if err != nil {
+		return err
+	}
+	if !addOne {
+		return nil
+	}
+
+	return w.addFromRegistry()
 }
 
 // ─── Status ──────────────────────────────────────────────────────────────────
@@ -674,7 +909,7 @@ func (w *wizard) rollback() error {
 	// Show most recent first.
 	options := make([]string, len(backups))
 	for i, b := range backups {
-		ri := len(backups) - 1 - i // reverse order
+		ri := len(backups) - 1 - i
 		label := fmt.Sprintf("%s  %s", b.Timestamp, output.Dim(b.Command))
 		options[ri] = label
 	}
@@ -683,7 +918,6 @@ func (w *wizard) rollback() error {
 	if err != nil {
 		return err
 	}
-	// Convert reversed index back.
 	actualIdx := len(backups) - 1 - backupIdx
 	selectedBackup := backups[actualIdx]
 
@@ -701,7 +935,6 @@ func (w *wizard) rollback() error {
 		return err
 	}
 
-	// Sync mcpup config to match restored state.
 	w.syncAfterRollback(client, meta)
 
 	fmt.Fprintf(w.out, "\n%s Restored %s from backup %s\n",
@@ -771,7 +1004,6 @@ func sortedServerNames(cfg store.Config) []string {
 func clientTableHeaders() []string {
 	headers := []string{"SERVER"}
 	for _, c := range store.SupportedClients {
-		// Shorten client names for the table.
 		short := c
 		switch c {
 		case "claude-code":
