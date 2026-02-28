@@ -43,6 +43,16 @@ func (r Report) HasFailures() bool {
 	return false
 }
 
+// HasWarnings reports whether report contains any warning.
+func (r Report) HasWarnings() bool {
+	for _, check := range r.Checks {
+		if check.Status == StatusWarn {
+			return true
+		}
+	}
+	return false
+}
+
 // RunDoctor executes diagnostics across canonical config and client configs.
 func RunDoctor(configPath string, workspace string) (Report, error) {
 	resolvedPath, err := store.ResolveConfigPath(configPath)

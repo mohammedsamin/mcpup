@@ -37,7 +37,15 @@ func Run(args []string, in *os.File, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	if len(remaining) == 0 || remaining[0] == "help" {
+	if len(remaining) == 0 {
+		// Interactive terminal with no args: launch wizard.
+		if in != nil && output.IsTTY() {
+			return runWizard(in, out)
+		}
+		printRootHelp(out)
+		return nil
+	}
+	if remaining[0] == "help" {
 		printRootHelp(out)
 		return nil
 	}
@@ -888,8 +896,11 @@ func runDoctor(opts GlobalOptions, args []string, out io.Writer) error {
 		status := "ok"
 		message := "all checks passed"
 		if report.HasFailures() {
+			status = "err"
+			message = "some checks failed"
+		} else if report.HasWarnings() {
 			status = "warn"
-			message = "one or more checks failed"
+			message = "all checks passed with warnings"
 		}
 
 		if err := printResult(out, opts, output.Result{
@@ -921,16 +932,18 @@ func runDoctor(opts GlobalOptions, args []string, out io.Writer) error {
 		}
 	}
 
+	fmt.Fprintln(out)
 	if report.HasFailures() {
-		fmt.Fprintln(out)
-		fmt.Fprintf(out, "%s one or more checks failed\n", output.StatusSymbol("err"))
+		fmt.Fprintf(out, "%s some checks failed\n", output.StatusSymbol("err"))
 		return &core.ReconcileError{
 			Code: core.ExitCodeValidation,
 			Err:  fmt.Errorf("doctor detected failure checks"),
 		}
 	}
-
-	fmt.Fprintln(out)
+	if report.HasWarnings() {
+		fmt.Fprintf(out, "%s all checks passed with warnings\n", output.StatusSymbol("warn"))
+		return nil
+	}
 	fmt.Fprintf(out, "%s all checks passed\n", output.StatusSymbol("ok"))
 	return nil
 }

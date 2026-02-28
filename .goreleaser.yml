@@ -31,10 +31,24 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - LICENSE
       - docs/*
 
 checksum:
   name_template: checksums.txt
+
+brews:
+  - repository:
+      owner: mohammedsamin
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/mohammedsamin/mcpup"
+    description: "Manage MCP server configs across AI clients from one place"
+    license: "MIT"
+    install: |
+      bin.install "mcpup"
+    test: |
+      system bin/"mcpup", "help"
 
 release:
   draft: false

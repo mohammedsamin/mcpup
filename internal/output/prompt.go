@@ -116,6 +116,142 @@ func printSelectUI(w io.Writer, question string, options []string, selected int)
 	}
 }
 
+// Input prompts the user for free-text input with an optional default value.
+// Returns the default when not interactive or the user presses enter without typing.
+func Input(in io.Reader, out io.Writer, question string, defaultVal string) (string, error) {
+	if !isTTY || in == nil {
+		return defaultVal, nil
+	}
+
+	hint := ""
+	if defaultVal != "" {
+		hint = " " + Dim("("+defaultVal+")")
+	}
+	fmt.Fprintf(out, "%s %s%s ", Yellow("?"), Bold(question), hint)
+
+	scanner := bufio.NewScanner(in)
+	if !scanner.Scan() {
+		fmt.Fprintln(out)
+		return defaultVal, scanner.Err()
+	}
+	answer := strings.TrimSpace(scanner.Text())
+	if answer == "" {
+		return defaultVal, nil
+	}
+	return answer, nil
+}
+
+// MultiSelect prompts the user to toggle multiple options with space and confirm with enter.
+// preSelected sets which options start checked (nil means all unchecked).
+// Returns indices of selected options.
+func MultiSelect(in *os.File, out io.Writer, question string, options []string, preSelected []bool) ([]int, error) {
+	if len(options) == 0 {
+		return nil, errors.New("no options to select from")
+	}
+	if !isTTY || in == nil {
+		return nil, ErrNotInteractive
+	}
+
+	restore, err := enableRawMode(int(in.Fd()))
+	if err != nil {
+		return nil, fmt.Errorf("enable raw mode: %w", err)
+	}
+	defer restore()
+
+	cursor := 0
+	checked := make([]bool, len(options))
+	if preSelected != nil {
+		copy(checked, preSelected)
+	}
+	numLines := 1 + len(options) + 1 // question + options + hint
+	buf := make([]byte, 3)
+
+	fmt.Fprint(out, "\033[?25l")
+	printMultiSelectUI(out, question, options, checked, cursor)
+
+	for {
+		n, readErr := in.Read(buf)
+		if readErr != nil {
+			fmt.Fprint(out, "\033[?25h")
+			return nil, readErr
+		}
+
+		switch {
+		case n == 1 && buf[0] == 3: // Ctrl+C
+			fmt.Fprint(out, "\033[?25h")
+			fmt.Fprintln(out)
+			return nil, errors.New("interrupted")
+
+		case n == 1 && buf[0] == ' ': // Space toggles
+			checked[cursor] = !checked[cursor]
+			eraseLines(out, numLines)
+			printMultiSelectUI(out, question, options, checked, cursor)
+
+		case n == 1 && buf[0] == 'a': // 'a' toggles all
+			allChecked := true
+			for _, c := range checked {
+				if !c {
+					allChecked = false
+					break
+				}
+			}
+			for i := range checked {
+				checked[i] = !allChecked
+			}
+			eraseLines(out, numLines)
+			printMultiSelectUI(out, question, options, checked, cursor)
+
+		case n == 1 && (buf[0] == '\r' || buf[0] == '\n'): // Enter confirms
+			eraseLines(out, numLines)
+			var selected []int
+			var names []string
+			for i, c := range checked {
+				if c {
+					selected = append(selected, i)
+					names = append(names, options[i])
+				}
+			}
+			summary := strings.Join(names, ", ")
+			if summary == "" {
+				summary = Dim("(none)")
+			}
+			fmt.Fprintf(out, "%s %s %s\r\n", Green(SymbolOK), Bold(question), Cyan(summary))
+			fmt.Fprint(out, "\033[?25h")
+			return selected, nil
+
+		case n == 3 && buf[0] == '\033' && buf[1] == '[' && buf[2] == 'A': // Up
+			if cursor > 0 {
+				cursor--
+				eraseLines(out, numLines)
+				printMultiSelectUI(out, question, options, checked, cursor)
+			}
+
+		case n == 3 && buf[0] == '\033' && buf[1] == '[' && buf[2] == 'B': // Down
+			if cursor < len(options)-1 {
+				cursor++
+				eraseLines(out, numLines)
+				printMultiSelectUI(out, question, options, checked, cursor)
+			}
+		}
+	}
+}
+
+func printMultiSelectUI(w io.Writer, question string, options []string, checked []bool, cursor int) {
+	fmt.Fprintf(w, "%s %s\r\n", Yellow("?"), Bold(question))
+	for i, opt := range options {
+		box := "[ ]"
+		if checked[i] {
+			box = "[" + Green(SymbolOK) + "]"
+		}
+		if i == cursor {
+			fmt.Fprintf(w, "  %s %s %s\r\n", Cyan(SymbolArrow), box, Cyan(opt))
+		} else {
+			fmt.Fprintf(w, "    %s %s\r\n", box, Dim(opt))
+		}
+	}
+	fmt.Fprintf(w, "  %s\r\n", Dim("space: toggle  a: all  enter: confirm"))
+}
+
 // eraseLines moves the cursor up n lines, clearing each one,
 // leaving the cursor at the start of the topmost cleared line.
 func eraseLines(w io.Writer, n int) {
