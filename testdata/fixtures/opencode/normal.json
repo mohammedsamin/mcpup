@@ -1,0 +1,25 @@
+{
+  "theme": "system",
+  "mcp": {
+    "servers": {
+      "github": {
+        "command": "npx -y @modelcontextprotocol/server-github",
+        "enabled": true,
+        "enabledTools": [
+          "search_issues"
+        ],
+        "metadata": {
+          "owner": "eng"
+        }
+      },
+      "memory": {
+        "command": "npx -y @example/memory",
+        "enabled": false
+      }
+    },
+    "telemetry": {
+      "enabled": false
+    }
+  }
+}
+

@@ -1,0 +1,24 @@
+{
+  "theme": "dark",
+  "mcpServers": {
+    "github": {
+      "command": "npx -y @modelcontextprotocol/server-github",
+      "enabled": true,
+      "enabledTools": [
+        "search_issues"
+      ],
+      "customField": "keep-me"
+    },
+    "slack": {
+      "command": "npx -y @example/slack-server",
+      "enabled": false,
+      "disabledTools": [
+        "delete_message"
+      ]
+    }
+  },
+  "extraTopLevel": {
+    "preserve": true
+  }
+}
+

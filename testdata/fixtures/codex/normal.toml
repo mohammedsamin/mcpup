@@ -1,0 +1,11 @@
+[core]
+model = "gpt-5"
+
+[mcp_servers.github]
+enabled = true
+enabled_tools = ["search_issues"]
+disabled_tools = ["delete_issue"]
+
+[mcp_servers.slack]
+enabled = false
+

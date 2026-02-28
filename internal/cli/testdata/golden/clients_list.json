@@ -1,0 +1,14 @@
+{
+  "command": "clients list",
+  "status": "ok",
+  "message": "supported clients",
+  "data": {
+    "supported": [
+      "claude-code",
+      "cursor",
+      "claude-desktop",
+      "codex",
+      "opencode"
+    ]
+  }
+}

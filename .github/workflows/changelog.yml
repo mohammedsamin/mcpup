@@ -1,0 +1,14 @@
+name: Changelog Check
+
+on:
+  pull_request:
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure changelog has Unreleased section
+        run: |
+          test -f CHANGELOG.md
+          grep -q "## \[Unreleased\]" CHANGELOG.md

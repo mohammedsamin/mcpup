@@ -1,0 +1,24 @@
+{
+  "$schema": "https://example.com/cursor-schema.json",
+  "mcpServers": {
+    "github": {
+      "command": "npx -y @modelcontextprotocol/server-github",
+      "enabled": true,
+      "enabledTools": [
+        "search_issues",
+        "list_prs"
+      ],
+      "metadata": {
+        "owner": "team-a"
+      }
+    },
+    "context7": {
+      "command": "npx -y @upstash/context7-mcp",
+      "enabled": true
+    }
+  },
+  "editor": {
+    "fontSize": 14
+  }
+}
+

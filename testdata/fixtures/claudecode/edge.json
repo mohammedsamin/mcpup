@@ -1,0 +1,9 @@
+{
+  "logging": {
+    "level": "debug"
+  },
+  "notes": [
+    "mcpServers key intentionally missing"
+  ]
+}
+

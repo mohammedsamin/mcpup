@@ -1,0 +1,5 @@
+[core]
+model = "gpt-5"
+
+# file with no mcp_servers blocks yet
+

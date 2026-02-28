@@ -1,0 +1,20 @@
+{
+  "launchAtLogin": true,
+  "mcpServers": {
+    "github": {
+      "command": "npx -y @modelcontextprotocol/server-github",
+      "enabled": true,
+      "enabledTools": [
+        "search_issues"
+      ],
+      "desktopOnly": {
+        "prompt": "allow"
+      }
+    },
+    "notion": {
+      "command": "npx -y @example/notion-server",
+      "enabled": false
+    }
+  }
+}
+
