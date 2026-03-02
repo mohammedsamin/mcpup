@@ -46,6 +46,40 @@ func TestRemoveErrorsOnMissing(t *testing.T) {
 	}
 }
 
+func TestRemoveReconcilesClientConfig(t *testing.T) {
+	env := setupTestEnv(t)
+	runCLI(t, env, "init")
+	runCLI(t, env, "add", "github", "--command", "echo", "--arg", "gh")
+	runCLI(t, env, "enable", "github", "--client", "cursor")
+
+	cursorPath := filepath.Join(env.home, ".cursor", "mcp.json")
+	bodyBefore, err := os.ReadFile(cursorPath)
+	if err != nil {
+		t.Fatalf("read cursor config before remove: %v", err)
+	}
+	docBefore := map[string]map[string]map[string]any{}
+	if err := json.Unmarshal(bodyBefore, &docBefore); err != nil {
+		t.Fatalf("parse cursor config before remove: %v", err)
+	}
+	if _, ok := docBefore["mcpServers"]["github"]; !ok {
+		t.Fatalf("expected github to exist before remove")
+	}
+
+	runCLI(t, env, "remove", "github")
+
+	bodyAfter, err := os.ReadFile(cursorPath)
+	if err != nil {
+		t.Fatalf("read cursor config after remove: %v", err)
+	}
+	docAfter := map[string]map[string]map[string]any{}
+	if err := json.Unmarshal(bodyAfter, &docAfter); err != nil {
+		t.Fatalf("parse cursor config after remove: %v", err)
+	}
+	if _, ok := docAfter["mcpServers"]["github"]; ok {
+		t.Fatalf("expected github to be removed from cursor config")
+	}
+}
+
 func TestEnableIsIdempotent(t *testing.T) {
 	env := setupTestEnv(t)
 	runCLI(t, env, "init")

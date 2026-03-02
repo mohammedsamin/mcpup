@@ -180,8 +180,8 @@ var catalog = []Template{
 	},
 	{
 		Name:        "elevenlabs",
-		Command:     "npx",
-		Args:        []string{"-y", "@anthropic/mcp-elevenlabs"},
+		Command:     "uvx",
+		Args:        []string{"elevenlabs-mcp"},
 		EnvVars:     []EnvVar{{Key: "ELEVENLABS_API_KEY", Required: true, Hint: "https://elevenlabs.io/app/settings/api-keys"}},
 		Description: "ElevenLabs - text-to-speech, voice generation",
 		Category:    "media",

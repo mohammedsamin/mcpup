@@ -24,22 +24,25 @@ func Confirm(in io.Reader, out io.Writer, question string, defaultYes bool) (boo
 	if defaultYes {
 		hint = "Y/n"
 	}
-	fmt.Fprintf(out, "%s %s %s ", Yellow("?"), Bold(question), Dim("["+hint+"]"))
-
 	scanner := bufio.NewScanner(in)
-	if !scanner.Scan() {
-		fmt.Fprintln(out)
-		return defaultYes, scanner.Err()
-	}
-	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	for {
+		fmt.Fprintf(out, "%s %s %s ", Yellow("?"), Bold(question), Dim("["+hint+"]"))
+		if !scanner.Scan() {
+			fmt.Fprintln(out)
+			return defaultYes, scanner.Err()
+		}
+		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
 
-	switch answer {
-	case "y", "yes":
-		return true, nil
-	case "n", "no":
-		return false, nil
-	default:
-		return defaultYes, nil
+		switch answer {
+		case "y", "yes":
+			return true, nil
+		case "n", "no":
+			return false, nil
+		case "":
+			return defaultYes, nil
+		default:
+			fmt.Fprintf(out, "%s\n", Dim("Please answer y or n."))
+		}
 	}
 }
 

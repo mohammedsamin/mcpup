@@ -358,8 +358,10 @@ func runRemove(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 	if err != nil {
 		return err
 	}
+	serverName := args[0]
+	affectedClients := clientsReferencingServer(cfg, serverName)
 
-	if err := store.RemoveServer(&cfg, args[0]); err != nil {
+	if err := store.RemoveServer(&cfg, serverName); err != nil {
 		return err
 	}
 
@@ -369,13 +371,26 @@ func runRemove(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 		}
 	}
 
+	clientResults, err := reconcileClients(cfg, affectedClients, "remove", opts.DryRun)
+	if err != nil {
+		return err
+	}
+
+	message := fmt.Sprintf("server %q removed", serverName)
+	if opts.DryRun {
+		message = fmt.Sprintf("dry-run: would remove server %q", serverName)
+	}
+
 	return printResult(out, opts, output.Result{
 		Command: "remove",
 		Status:  "ok",
-		Message: fmt.Sprintf("server %q removed", args[0]),
+		Message: message,
 		Data: map[string]any{
-			"name":   args[0],
-			"dryRun": opts.DryRun,
+			"name":             serverName,
+			"clients":          affectedClients,
+			"reconciledClients": len(clientResults),
+			"clientResults":    clientResults,
+			"dryRun":           opts.DryRun,
 		},
 	})
 }

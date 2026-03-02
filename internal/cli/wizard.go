@@ -240,7 +240,7 @@ func (w *wizard) addFromRegistry() error {
 
 	fmt.Fprintf(w.out, "\n%s Server %s added\n", output.Green(output.SymbolOK), output.Bold(tmpl.Name))
 
-	enableNow, err := output.Confirm(w.in, w.out, "Enable on clients now?", true)
+	enableNow, err := output.Confirm(w.in, w.out, "Enable on clients now?", false)
 	if err != nil {
 		return err
 	}
@@ -333,7 +333,7 @@ func (w *wizard) addCustomServer() error {
 
 	fmt.Fprintf(w.out, "\n%s Server %s added\n", output.Green(output.SymbolOK), output.Bold(name))
 
-	enableNow, err := output.Confirm(w.in, w.out, "Enable on clients now?", true)
+	enableNow, err := output.Confirm(w.in, w.out, "Enable on clients now?", false)
 	if err != nil {
 		return err
 	}
@@ -363,6 +363,7 @@ func (w *wizard) removeServer() error {
 		return err
 	}
 	name := serverNames[idx]
+	affectedClients := clientsReferencingServer(cfg, name)
 
 	confirmed, err := output.Confirm(w.in, w.out, fmt.Sprintf("Remove %q? This cannot be undone.", name), false)
 	if err != nil {
@@ -378,8 +379,15 @@ func (w *wizard) removeServer() error {
 	if err := store.SaveConfig(path, cfg); err != nil {
 		return err
 	}
+	results, err := reconcileClients(cfg, affectedClients, "remove", false)
+	if err != nil {
+		return err
+	}
 
 	fmt.Fprintf(w.out, "\n%s Server %s removed\n", output.Green(output.SymbolOK), output.Bold(name))
+	if len(results) > 0 {
+		fmt.Fprintf(w.out, "  %s Synced removal to %d client(s)\n", output.Green(output.SymbolOK), len(results))
+	}
 	return nil
 }
 
