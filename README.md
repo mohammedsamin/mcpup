@@ -91,6 +91,9 @@ mcpup add github --env GITHUB_TOKEN=ghp_xxx
 # Add a custom server
 mcpup add my-server --command npx --arg -y --arg my-mcp-package
 
+# Add a remote HTTP/SSE server
+mcpup add my-remote --url https://api.example.com/mcp --header "Authorization:Bearer sk-xxx"
+
 # Enable on clients
 mcpup enable github --client cursor
 mcpup enable github --client claude-code
@@ -192,6 +195,7 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
 ## Features
 
 - **One config, all clients** — define a server once, enable it on any client
+- **HTTP/SSE transport** — manage remote MCP servers via URL, not just local commands
 - **Interactive wizard** — arrow-key menu for everything, no commands to memorize
 - **Setup command** — guided onboarding to select clients, servers, and required keys
 - **Built-in registry** — 19 popular servers with pre-filled commands and args
@@ -202,7 +206,7 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
 - **Shell completion** — generate completions for bash/zsh/fish
 - **Auto-backup** — every config write creates a timestamped backup
 - **Rollback** — restore any client config from any backup with one command
-- **Doctor** — diagnose config issues, missing executables, permission problems
+- **Doctor** — diagnose config issues, missing executables, URL validation
 - **Dry-run** — preview changes without writing anything (`--dry-run`)
 - **JSON output** — pipe to `jq` for scripting (`--json`)
 - **Zero dependencies** — single binary, no runtime requirements
@@ -215,7 +219,7 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
 | `mcpup` | Launch interactive wizard |
 | `mcpup init [--import]` | Initialize config (optionally import existing) |
 | `mcpup setup` | Guided onboarding across clients and servers |
-| `mcpup add <name>` | Add server (from registry or custom with `--command`) |
+| `mcpup add <name>` | Add server (from registry, custom `--command`, or remote `--url`) |
 | `mcpup update [name...]` | Refresh registry-backed server definitions |
 | `mcpup remove <name>` | Remove a server |
 | `mcpup enable <name> --client <c>` | Enable server on a client |
@@ -257,6 +261,20 @@ mcpup enable github --client cursor
 mcpup enable github --client claude-desktop
 mcpup enable github --client codex
 mcpup enable github --client opencode
+```
+
+### Add a remote HTTP/SSE server
+
+```bash
+# Add a remote MCP server with authentication
+mcpup add company-server --url https://mcp.company.com/sse --header "Authorization:Bearer token123"
+
+# Specify transport explicitly
+mcpup add my-api --url https://api.example.com/mcp --transport streamable-http
+
+# Enable on clients — writes url/headers instead of command/args
+mcpup enable company-server --client cursor
+mcpup enable company-server --client claude-code
 ```
 
 ### Create a work profile
