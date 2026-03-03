@@ -193,6 +193,9 @@ type codexServerEntry struct {
 	Command       string            `json:"command,omitempty"`
 	Args          []string          `json:"args,omitempty"`
 	Env           map[string]string `json:"env,omitempty"`
+	URL           string            `json:"url,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Transport     string            `json:"transport,omitempty"`
 }
 
 func encodeManagedBlock(state planner.ClientState) ([]byte, error) {
@@ -208,6 +211,9 @@ func encodeManagedBlock(state planner.ClientState) ([]byte, error) {
 			entry.Command = def.Command
 			entry.Args = def.Args
 			entry.Env = def.Env
+			entry.URL = def.URL
+			entry.Headers = def.Headers
+			entry.Transport = def.Transport
 		}
 		servers[name] = entry
 	}
@@ -249,22 +255,41 @@ func encodeTOMLServers(state planner.ClientState) []byte {
 		lines = append(lines, fmt.Sprintf("[mcp_servers.%s]", name))
 
 		if def, ok := state.ServerDefs[name]; ok {
-			if def.Command != "" {
-				lines = append(lines, fmt.Sprintf("command = %s", quoteTOML(def.Command)))
-			}
-			if len(def.Args) > 0 {
-				lines = append(lines, fmt.Sprintf("args = [%s]", joinTOMLArray(def.Args)))
-			}
-			if len(def.Env) > 0 {
-				envKeys := make([]string, 0, len(def.Env))
-				for k := range def.Env {
-					envKeys = append(envKeys, k)
+			if def.IsHTTP() {
+				lines = append(lines, fmt.Sprintf("url = %s", quoteTOML(def.URL)))
+				if def.Transport != "" {
+					lines = append(lines, fmt.Sprintf("transport = %s", quoteTOML(def.Transport)))
 				}
-				sort.Strings(envKeys)
-				lines = append(lines, "")
-				lines = append(lines, fmt.Sprintf("[mcp_servers.%s.env]", name))
-				for _, k := range envKeys {
-					lines = append(lines, fmt.Sprintf("%s = %s", k, quoteTOML(def.Env[k])))
+				if len(def.Headers) > 0 {
+					headerKeys := make([]string, 0, len(def.Headers))
+					for k := range def.Headers {
+						headerKeys = append(headerKeys, k)
+					}
+					sort.Strings(headerKeys)
+					lines = append(lines, "")
+					lines = append(lines, fmt.Sprintf("[mcp_servers.%s.headers]", name))
+					for _, k := range headerKeys {
+						lines = append(lines, fmt.Sprintf("%s = %s", k, quoteTOML(def.Headers[k])))
+					}
+				}
+			} else {
+				if def.Command != "" {
+					lines = append(lines, fmt.Sprintf("command = %s", quoteTOML(def.Command)))
+				}
+				if len(def.Args) > 0 {
+					lines = append(lines, fmt.Sprintf("args = [%s]", joinTOMLArray(def.Args)))
+				}
+				if len(def.Env) > 0 {
+					envKeys := make([]string, 0, len(def.Env))
+					for k := range def.Env {
+						envKeys = append(envKeys, k)
+					}
+					sort.Strings(envKeys)
+					lines = append(lines, "")
+					lines = append(lines, fmt.Sprintf("[mcp_servers.%s.env]", name))
+					for _, k := range envKeys {
+						lines = append(lines, fmt.Sprintf("%s = %s", k, quoteTOML(def.Env[k])))
+					}
 				}
 			}
 		}

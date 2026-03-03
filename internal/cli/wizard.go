@@ -259,55 +259,105 @@ func (w *wizard) addCustomServer() error {
 		return fmt.Errorf("server name cannot be empty")
 	}
 
-	command, err := output.Input(w.in, w.out, "Command (e.g. npx, uvx, docker):", "")
+	transportIdx, err := output.Select(w.in, w.out, "Transport type:", []string{
+		"stdio (command-based)",
+		"HTTP/SSE (url-based)",
+	})
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(command) == "" {
-		return fmt.Errorf("command cannot be empty")
-	}
 
-	argsStr, err := output.Input(w.in, w.out, "Arguments (space-separated, or empty):", "")
-	if err != nil {
-		return err
-	}
-	var args []string
-	if strings.TrimSpace(argsStr) != "" {
-		args = strings.Fields(argsStr)
-	}
+	var server store.Server
 
-	envMap := map[string]string{}
-	for {
-		envStr, envErr := output.Input(w.in, w.out, "Environment variable (KEY=VALUE, or empty to skip):", "")
-		if envErr != nil {
-			return envErr
+	if transportIdx == 1 {
+		// HTTP/SSE server.
+		url, urlErr := output.Input(w.in, w.out, "Server URL:", "")
+		if urlErr != nil {
+			return urlErr
 		}
-		if strings.TrimSpace(envStr) == "" {
-			break
+		if strings.TrimSpace(url) == "" {
+			return fmt.Errorf("url cannot be empty")
 		}
-		key, value, ok := strings.Cut(envStr, "=")
-		if !ok || strings.TrimSpace(key) == "" {
-			fmt.Fprintf(w.out, "  %s expected KEY=VALUE format, try again\n", output.Yellow(output.SymbolWarn))
-			continue
-		}
-		envMap[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	}
 
-	description, err := output.Input(w.in, w.out, "Description (optional):", "")
-	if err != nil {
-		return err
+		headerMap := map[string]string{}
+		for {
+			headerStr, headerErr := output.Input(w.in, w.out, "HTTP header (Key:Value, or empty to skip):", "")
+			if headerErr != nil {
+				return headerErr
+			}
+			if strings.TrimSpace(headerStr) == "" {
+				break
+			}
+			key, value, ok := strings.Cut(headerStr, ":")
+			if !ok || strings.TrimSpace(key) == "" {
+				fmt.Fprintf(w.out, "  %s expected Key:Value format, try again\n", output.Yellow(output.SymbolWarn))
+				continue
+			}
+			headerMap[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		}
+
+		description, descErr := output.Input(w.in, w.out, "Description (optional):", "")
+		if descErr != nil {
+			return descErr
+		}
+
+		server = store.Server{
+			URL:         strings.TrimSpace(url),
+			Headers:     headerMap,
+			Description: strings.TrimSpace(description),
+		}
+	} else {
+		// stdio server.
+		command, cmdErr := output.Input(w.in, w.out, "Command (e.g. npx, uvx, docker):", "")
+		if cmdErr != nil {
+			return cmdErr
+		}
+		if strings.TrimSpace(command) == "" {
+			return fmt.Errorf("command cannot be empty")
+		}
+
+		argsStr, argsErr := output.Input(w.in, w.out, "Arguments (space-separated, or empty):", "")
+		if argsErr != nil {
+			return argsErr
+		}
+		var args []string
+		if strings.TrimSpace(argsStr) != "" {
+			args = strings.Fields(argsStr)
+		}
+
+		envMap := map[string]string{}
+		for {
+			envStr, envErr := output.Input(w.in, w.out, "Environment variable (KEY=VALUE, or empty to skip):", "")
+			if envErr != nil {
+				return envErr
+			}
+			if strings.TrimSpace(envStr) == "" {
+				break
+			}
+			key, value, ok := strings.Cut(envStr, "=")
+			if !ok || strings.TrimSpace(key) == "" {
+				fmt.Fprintf(w.out, "  %s expected KEY=VALUE format, try again\n", output.Yellow(output.SymbolWarn))
+				continue
+			}
+			envMap[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		}
+
+		description, descErr := output.Input(w.in, w.out, "Description (optional):", "")
+		if descErr != nil {
+			return descErr
+		}
+
+		server = store.Server{
+			Command:     strings.TrimSpace(command),
+			Args:        args,
+			Env:         envMap,
+			Description: strings.TrimSpace(description),
+		}
 	}
 
 	path, cfg, err := store.EnsureConfig("")
 	if err != nil {
 		return err
-	}
-
-	server := store.Server{
-		Command:     strings.TrimSpace(command),
-		Args:        args,
-		Env:         envMap,
-		Description: strings.TrimSpace(description),
 	}
 
 	if err := store.AddServer(&cfg, name, server); err != nil {
@@ -595,18 +645,23 @@ func (w *wizard) listServers() error {
 	}
 
 	fmt.Fprintln(w.out)
-	tbl := &output.Table{Headers: []string{"SERVER", "COMMAND", "DESCRIPTION"}}
+	tbl := &output.Table{Headers: []string{"SERVER", "COMMAND/URL", "DESCRIPTION"}}
 	for _, name := range serverNames {
 		srv := cfg.Servers[name]
 		desc := srv.Description
 		if desc == "" {
 			desc = output.Dim("-")
 		}
-		cmd := srv.Command
-		if len(srv.Args) > 0 {
-			cmd += " " + strings.Join(srv.Args, " ")
+		var target string
+		if srv.IsHTTP() {
+			target = srv.URL
+		} else {
+			target = srv.Command
+			if len(srv.Args) > 0 {
+				target += " " + strings.Join(srv.Args, " ")
+			}
 		}
-		tbl.AddRow(name, cmd, desc)
+		tbl.AddRow(name, target, desc)
 	}
 	tbl.Render(w.out)
 

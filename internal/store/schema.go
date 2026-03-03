@@ -1,5 +1,7 @@
 package store
 
+import "strings"
+
 // CurrentSchemaVersion is the canonical config schema version for mcpup.
 const CurrentSchemaVersion = 1
 
@@ -26,10 +28,18 @@ type Config struct {
 
 // Server describes one MCP server definition in the registry.
 type Server struct {
-	Command     string            `json:"command"`
+	Command     string            `json:"command,omitempty"`
 	Args        []string          `json:"args,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
+	URL         string            `json:"url,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Transport   string            `json:"transport,omitempty"` // "stdio", "sse", "streamable-http"
 	Description string            `json:"description,omitempty"`
+}
+
+// IsHTTP reports whether the server is configured via URL rather than command.
+func (s Server) IsHTTP() bool {
+	return strings.TrimSpace(s.URL) != ""
 }
 
 // ClientConfig stores enable/disable state per server for one client.

@@ -58,6 +58,51 @@ func TestProfileCRUD(t *testing.T) {
 	}
 }
 
+func TestAddServerWithURL(t *testing.T) {
+	cfg := NewDefaultConfig()
+
+	server := Server{
+		URL:     "https://api.example.com/mcp",
+		Headers: map[string]string{"Authorization": "Bearer sk-xxx"},
+	}
+	if err := AddServer(&cfg, "remote", server); err != nil {
+		t.Fatalf("add HTTP server failed: %v", err)
+	}
+	if !cfg.Servers["remote"].IsHTTP() {
+		t.Fatalf("expected server to be HTTP")
+	}
+	if cfg.Servers["remote"].URL != "https://api.example.com/mcp" {
+		t.Fatalf("expected URL to be set")
+	}
+}
+
+func TestAddServerRejectsEmptyCommandAndURL(t *testing.T) {
+	cfg := NewDefaultConfig()
+	if err := AddServer(&cfg, "empty", Server{}); err == nil {
+		t.Fatalf("expected error for empty command and url")
+	}
+}
+
+func TestUpsertServerWithURL(t *testing.T) {
+	cfg := NewDefaultConfig()
+
+	server := Server{URL: "https://example.com/mcp"}
+	if err := UpsertServer(&cfg, "remote", server); err != nil {
+		t.Fatalf("upsert HTTP server failed: %v", err)
+	}
+	if cfg.Servers["remote"].URL != "https://example.com/mcp" {
+		t.Fatalf("expected URL to be set")
+	}
+
+	// Update to command-based.
+	if err := UpsertServer(&cfg, "remote", Server{Command: "npx server"}); err != nil {
+		t.Fatalf("upsert to command server failed: %v", err)
+	}
+	if cfg.Servers["remote"].Command != "npx server" {
+		t.Fatalf("expected command to be set")
+	}
+}
+
 func TestClientServerAndToolUpdates(t *testing.T) {
 	cfg := NewDefaultConfig()
 	cfg.Servers["github"] = Server{Command: "npx github"}

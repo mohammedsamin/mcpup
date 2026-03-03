@@ -58,11 +58,24 @@ func (a Adapter) Apply(current planner.ClientState, desired planner.ClientState)
 }
 
 // Write writes desired state preserving unknown top-level keys.
+// Continue requires explicit "type": "sse" for HTTP servers, so we set
+// transport before delegating to the shared helper.
 func (a Adapter) Write(path string, desired planner.ClientState) error {
 	doc, err := adapters.ReadJSONDocument(path)
 	if err != nil {
 		return err
 	}
+
+	// Ensure HTTP servers have a transport set for Continue's "type" field.
+	if desired.ServerDefs != nil {
+		for name, def := range desired.ServerDefs {
+			if def.IsHTTP() && def.Transport == "" {
+				def.Transport = "sse"
+				desired.ServerDefs[name] = def
+			}
+		}
+	}
+
 	return adapters.WriteStateToMCPServers(path, doc, desired)
 }
 

@@ -212,22 +212,30 @@ func runInit(opts GlobalOptions, args []string, out io.Writer) error {
 func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 	if hasHelp(args) {
 		fmt.Fprintln(out, "Usage: mcpup add <name> --command <cmd> [--arg <value>]... [--env KEY=VALUE]... [--description <text>]")
+		fmt.Fprintln(out, "       mcpup add <name> --url <url> [--header Key:Value]... [--transport sse|streamable-http] [--description <text>]")
 		return nil
 	}
 
 	fs := newFlagSet("add")
 	command := fs.String("command", "", "server command")
+	url := fs.String("url", "", "server URL for HTTP/SSE transport")
+	transport := fs.String("transport", "", "transport type (sse, streamable-http)")
 	description := fs.String("description", "", "server description")
 	update := fs.Bool("update", false, "update server if it already exists")
 	var cmdArgs repeatedFlag
 	var envVars repeatedFlag
+	var headerVars repeatedFlag
 	fs.Var(&cmdArgs, "arg", "server argument (repeatable)")
 	fs.Var(&envVars, "env", "environment variable KEY=VALUE (repeatable)")
+	fs.Var(&headerVars, "header", "HTTP header Key:Value (repeatable)")
 
 	normalized, err := normalizeArgs(args, map[string]bool{
 		"--command":     true,
 		"--arg":         true,
 		"--env":         true,
+		"--url":         true,
+		"--header":      true,
+		"--transport":   true,
 		"--description": true,
 		"--update":      false,
 	})
@@ -240,15 +248,33 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("%w: add requires exactly one positional argument: <name>", errUsage)
 	}
-	// When --command is not provided, check the built-in registry.
-	if strings.TrimSpace(*command) == "" {
+
+	hasCommand := strings.TrimSpace(*command) != ""
+	hasURL := strings.TrimSpace(*url) != ""
+
+	// Mutual exclusivity.
+	if hasCommand && hasURL {
+		return fmt.Errorf("%w: --command and --url are mutually exclusive", errUsage)
+	}
+
+	// When neither --command nor --url is provided, check the built-in registry.
+	if !hasCommand && !hasURL {
 		tmpl, found := registry.Lookup(fs.Arg(0))
 		if !found {
-			return fmt.Errorf("%w: add requires --command (server %q is not in the built-in registry)", errUsage, fs.Arg(0))
+			return fmt.Errorf("%w: add requires --command or --url (server %q is not in the built-in registry)", errUsage, fs.Arg(0))
 		}
-		*command = tmpl.Command
-		if len(cmdArgs) == 0 {
-			cmdArgs = repeatedFlag(tmpl.Args)
+		if tmpl.URL != "" {
+			*url = tmpl.URL
+			hasURL = true
+			if strings.TrimSpace(*transport) == "" && tmpl.Transport != "" {
+				*transport = tmpl.Transport
+			}
+		} else {
+			*command = tmpl.Command
+			hasCommand = true
+			if len(cmdArgs) == 0 {
+				cmdArgs = repeatedFlag(tmpl.Args)
+			}
 		}
 		if strings.TrimSpace(*description) == "" {
 			*description = tmpl.Description
@@ -275,6 +301,15 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 		}
 	}
 
+	// Validate transport value.
+	if t := strings.TrimSpace(*transport); t != "" {
+		switch t {
+		case "sse", "streamable-http", "stdio": // ok
+		default:
+			return fmt.Errorf("%w: unsupported --transport value %q (use sse or streamable-http)", errUsage, t)
+		}
+	}
+
 	envMap := map[string]string{}
 	for _, kv := range envVars {
 		key, value, ok := strings.Cut(kv, "=")
@@ -284,17 +319,37 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 		envMap[strings.TrimSpace(key)] = strings.TrimSpace(value)
 	}
 
+	headerMap := map[string]string{}
+	for _, kv := range headerVars {
+		key, value, ok := strings.Cut(kv, ":")
+		if !ok || strings.TrimSpace(key) == "" {
+			return fmt.Errorf("%w: invalid --header value %q, expected Key:Value", errUsage, kv)
+		}
+		headerMap[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+
 	path, cfg, err := store.EnsureConfig("")
 	if err != nil {
 		return err
 	}
 
-	server := store.Server{
-		Command:     strings.TrimSpace(*command),
-		Args:        normalizeList([]string(cmdArgs)),
-		Env:         envMap,
-		Description: strings.TrimSpace(*description),
+	var server store.Server
+	if hasURL {
+		server = store.Server{
+			URL:         strings.TrimSpace(*url),
+			Headers:     headerMap,
+			Transport:   strings.TrimSpace(*transport),
+			Description: strings.TrimSpace(*description),
+		}
+	} else {
+		server = store.Server{
+			Command:     strings.TrimSpace(*command),
+			Args:        normalizeList([]string(cmdArgs)),
+			Env:         envMap,
+			Description: strings.TrimSpace(*description),
+		}
 	}
+
 	existed := false
 	if _, ok := cfg.Servers[fs.Arg(0)]; ok {
 		existed = true
@@ -318,19 +373,27 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 		}
 	}
 
+	data := map[string]any{
+		"name":        fs.Arg(0),
+		"description": server.Description,
+		"updated":     existed,
+		"dryRun":      opts.DryRun,
+	}
+	if hasURL {
+		data["url"] = server.URL
+		data["headerCount"] = len(server.Headers)
+		data["transport"] = server.Transport
+	} else {
+		data["command"] = server.Command
+		data["args"] = server.Args
+		data["envCount"] = len(server.Env)
+	}
+
 	return printResult(out, opts, output.Result{
 		Command: "add",
 		Status:  "ok",
 		Message: fmt.Sprintf("server %q %s", fs.Arg(0), ternary(existed, "updated", "added")),
-		Data: map[string]any{
-			"name":        fs.Arg(0),
-			"command":     server.Command,
-			"args":        server.Args,
-			"envCount":    len(server.Env),
-			"description": server.Description,
-			"updated":     existed,
-			"dryRun":      opts.DryRun,
-		},
+		Data:    data,
 	})
 }
 
@@ -563,9 +626,14 @@ func runList(opts GlobalOptions, args []string, out io.Writer) error {
 	if opts.JSON {
 		serversData := make([]map[string]any, 0, len(serverNames))
 		for _, serverName := range serverNames {
+			srv := cfg.Servers[serverName]
 			entry := map[string]any{
-				"name":    serverName,
-				"command": cfg.Servers[serverName].Command,
+				"name": serverName,
+			}
+			if srv.IsHTTP() {
+				entry["url"] = srv.URL
+			} else {
+				entry["command"] = srv.Command
 			}
 			if filter != "" {
 				if state, ok := cfg.Clients[filter].Servers[serverName]; ok {
@@ -600,21 +668,27 @@ func runList(opts GlobalOptions, args []string, out io.Writer) error {
 
 	tbl := &output.Table{}
 	if filter != "" {
-		tbl.Headers = []string{"NAME", "COMMAND", "ENABLED"}
+		tbl.Headers = []string{"NAME", "COMMAND/URL", "ENABLED"}
 	} else {
-		tbl.Headers = []string{"NAME", "COMMAND"}
+		tbl.Headers = []string{"NAME", "COMMAND/URL"}
 	}
 
 	for _, serverName := range serverNames {
-		cmd := cfg.Servers[serverName].Command
+		srv := cfg.Servers[serverName]
+		var target string
+		if srv.IsHTTP() {
+			target = srv.URL
+		} else {
+			target = srv.Command
+		}
 		if filter != "" {
 			enabled := false
 			if state, ok := cfg.Clients[filter].Servers[serverName]; ok {
 				enabled = state.Enabled
 			}
-			tbl.AddRow(serverName, cmd, output.EnabledSymbol(enabled))
+			tbl.AddRow(serverName, target, output.EnabledSymbol(enabled))
 		} else {
-			tbl.AddRow(serverName, cmd)
+			tbl.AddRow(serverName, target)
 		}
 	}
 

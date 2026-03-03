@@ -259,6 +259,14 @@ func setupServerFromTemplate(
 	if !exists || updateDefs {
 		server.Command = tmpl.Command
 		server.Args = append([]string{}, tmpl.Args...)
+		server.URL = tmpl.URL
+		if tmpl.Headers != nil {
+			server.Headers = make(map[string]string, len(tmpl.Headers))
+			for k, v := range tmpl.Headers {
+				server.Headers[k] = v
+			}
+		}
+		server.Transport = tmpl.Transport
 		server.Description = tmpl.Description
 	}
 	if server.Env == nil {

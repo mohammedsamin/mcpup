@@ -143,6 +143,45 @@ func (a Adapter) Write(path string, desired planner.ClientState) error {
 			delete(entry, "disabledTools")
 		}
 
+		// Write server definition fields.
+		if def, ok := desired.ServerDefs[serverName]; ok {
+			if def.IsHTTP() {
+				rawURL, _ := json.Marshal(def.URL)
+				entry["url"] = rawURL
+				if len(def.Headers) > 0 {
+					rawHeaders, _ := json.Marshal(def.Headers)
+					entry["headers"] = rawHeaders
+				} else {
+					delete(entry, "headers")
+				}
+				if def.Transport != "" {
+					rawTransport, _ := json.Marshal(def.Transport)
+					entry["transport"] = rawTransport
+				}
+				delete(entry, "command")
+				delete(entry, "args")
+				delete(entry, "env")
+			} else if def.Command != "" {
+				rawCmd, _ := json.Marshal(def.Command)
+				entry["command"] = rawCmd
+				if len(def.Args) > 0 {
+					rawArgs, _ := json.Marshal(def.Args)
+					entry["args"] = rawArgs
+				} else {
+					delete(entry, "args")
+				}
+				if len(def.Env) > 0 {
+					rawEnv, _ := json.Marshal(def.Env)
+					entry["env"] = rawEnv
+				} else {
+					delete(entry, "env")
+				}
+				delete(entry, "url")
+				delete(entry, "headers")
+				delete(entry, "transport")
+			}
+		}
+
 		nextServers[serverName] = entry
 	}
 

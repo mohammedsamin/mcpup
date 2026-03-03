@@ -19,8 +19,8 @@ func AddServer(cfg *Config, name string, server Server) error {
 	if err := ValidateServerName(name); err != nil {
 		return err
 	}
-	if strings.TrimSpace(server.Command) == "" {
-		return errors.New("server command cannot be empty")
+	if strings.TrimSpace(server.Command) == "" && strings.TrimSpace(server.URL) == "" {
+		return errors.New("server requires either a command or a url")
 	}
 	if _, exists := cfg.Servers[name]; exists {
 		return fmt.Errorf("server %q: %w", name, ErrAlreadyExists)
@@ -35,8 +35,8 @@ func UpsertServer(cfg *Config, name string, server Server) error {
 	if err := ValidateServerName(name); err != nil {
 		return err
 	}
-	if strings.TrimSpace(server.Command) == "" {
-		return errors.New("server command cannot be empty")
+	if strings.TrimSpace(server.Command) == "" && strings.TrimSpace(server.URL) == "" {
+		return errors.New("server requires either a command or a url")
 	}
 	cfg.Servers[name] = server
 	return nil

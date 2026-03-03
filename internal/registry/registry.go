@@ -14,13 +14,16 @@ type EnvVar struct {
 
 // Template is a known MCP server definition in the built-in catalog.
 type Template struct {
-	Name        string   `json:"name"`
-	Command     string   `json:"command"`
-	Args        []string `json:"args"`
-	Tools       []string `json:"tools,omitempty"`
-	EnvVars     []EnvVar `json:"envVars,omitempty"`
-	Description string   `json:"description"`
-	Category    string   `json:"category"`
+	Name        string            `json:"name"`
+	Command     string            `json:"command,omitempty"`
+	Args        []string          `json:"args,omitempty"`
+	URL         string            `json:"url,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Transport   string            `json:"transport,omitempty"`
+	Tools       []string          `json:"tools,omitempty"`
+	EnvVars     []EnvVar          `json:"envVars,omitempty"`
+	Description string            `json:"description"`
+	Category    string            `json:"category"`
 }
 
 // catalog is the built-in set of known MCP servers.

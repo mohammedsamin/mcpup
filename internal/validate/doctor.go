@@ -170,6 +170,25 @@ func RunDoctor(configPath string, workspace string) (Report, error) {
 	}
 
 	for serverName, serverDef := range cfg.Servers {
+		if serverDef.IsHTTP() {
+			url := strings.TrimSpace(serverDef.URL)
+			if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+				report.Checks = append(report.Checks, Check{
+					Key:        "server.url." + serverName,
+					Status:     StatusWarn,
+					Message:    fmt.Sprintf("server URL does not start with http:// or https://: %s", url),
+					Suggestion: "use a fully qualified URL starting with http:// or https://",
+				})
+			} else {
+				report.Checks = append(report.Checks, Check{
+					Key:     "server.url." + serverName,
+					Status:  StatusPass,
+					Message: fmt.Sprintf("server URL is valid: %s", url),
+				})
+			}
+			continue
+		}
+
 		command := strings.TrimSpace(serverDef.Command)
 		if command == "" {
 			report.Checks = append(report.Checks, Check{

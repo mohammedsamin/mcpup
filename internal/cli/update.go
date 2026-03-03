@@ -16,13 +16,15 @@ import (
 )
 
 type updateCandidate struct {
-	Name            string   `json:"name"`
-	FromCommand     string   `json:"fromCommand"`
-	ToCommand       string   `json:"toCommand"`
+	Name            string `json:"name"`
+	FromCommand     string `json:"fromCommand"`
+	ToCommand       string `json:"toCommand"`
 	FromArgs        []string `json:"fromArgs"`
 	ToArgs          []string `json:"toArgs"`
-	FromDescription string   `json:"fromDescription"`
-	ToDescription   string   `json:"toDescription"`
+	FromURL         string `json:"fromURL,omitempty"`
+	ToURL           string `json:"toURL,omitempty"`
+	FromDescription string `json:"fromDescription"`
+	ToDescription   string `json:"toDescription"`
 }
 
 func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) error {
@@ -83,6 +85,7 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 
 		if current.Command == tmpl.Command &&
 			slices.Equal(current.Args, tmpl.Args) &&
+			current.URL == tmpl.URL &&
 			strings.TrimSpace(current.Description) == strings.TrimSpace(tmpl.Description) {
 			continue
 		}
@@ -93,6 +96,8 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 			ToCommand:       tmpl.Command,
 			FromArgs:        append([]string{}, current.Args...),
 			ToArgs:          append([]string{}, tmpl.Args...),
+			FromURL:         current.URL,
+			ToURL:           tmpl.URL,
 			FromDescription: current.Description,
 			ToDescription:   tmpl.Description,
 		})
@@ -129,6 +134,7 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 		srv := cfg.Servers[c.Name]
 		srv.Command = c.ToCommand
 		srv.Args = append([]string{}, c.ToArgs...)
+		srv.URL = c.ToURL
 		srv.Description = c.ToDescription
 		cfg.Servers[c.Name] = srv
 	}

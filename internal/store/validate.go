@@ -104,8 +104,23 @@ func ValidateConfigSchema(cfg Config) error {
 		if err := ValidateServerName(serverName); err != nil {
 			return fmt.Errorf("servers.%s: %w", serverName, err)
 		}
-		if strings.TrimSpace(def.Command) == "" {
-			return fmt.Errorf("servers.%s.command cannot be empty", serverName)
+		if strings.TrimSpace(def.Command) == "" && strings.TrimSpace(def.URL) == "" {
+			return fmt.Errorf("servers.%s: requires either command or url", serverName)
+		}
+		if strings.TrimSpace(def.Command) != "" && strings.TrimSpace(def.URL) != "" {
+			return fmt.Errorf("servers.%s: cannot have both command and url", serverName)
+		}
+		if def.Transport != "" {
+			switch def.Transport {
+			case "stdio", "sse", "streamable-http": // ok
+			default:
+				return fmt.Errorf("servers.%s.transport: unsupported value %q", serverName, def.Transport)
+			}
+		}
+		for key := range def.Headers {
+			if !envKeyPattern.MatchString(key) {
+				return fmt.Errorf("servers.%s.headers has invalid key %q", serverName, key)
+			}
 		}
 		for key, value := range def.Env {
 			if !envKeyPattern.MatchString(key) {

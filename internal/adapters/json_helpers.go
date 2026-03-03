@@ -133,31 +133,67 @@ func WriteStateToServerMap(path string, doc JSONDocument, topLevelKey string, de
 			delete(base, "disabledTools")
 		}
 
-		if def, ok := desired.ServerDefs[serverName]; ok && strings.TrimSpace(def.Command) != "" {
-			rawCmd, err := json.Marshal(def.Command)
-			if err != nil {
-				return fmt.Errorf("encode command for server %q: %w", serverName, err)
-			}
-			base["command"] = rawCmd
-
-			if len(def.Args) > 0 {
-				rawArgs, err := json.Marshal(def.Args)
+		if def, ok := desired.ServerDefs[serverName]; ok {
+			if def.IsHTTP() {
+				rawURL, err := json.Marshal(def.URL)
 				if err != nil {
-					return fmt.Errorf("encode args for server %q: %w", serverName, err)
+					return fmt.Errorf("encode url for server %q: %w", serverName, err)
 				}
-				base["args"] = rawArgs
-			} else {
+				base["url"] = rawURL
+
+				if len(def.Headers) > 0 {
+					rawHeaders, err := json.Marshal(def.Headers)
+					if err != nil {
+						return fmt.Errorf("encode headers for server %q: %w", serverName, err)
+					}
+					base["headers"] = rawHeaders
+				} else {
+					delete(base, "headers")
+				}
+
+				if def.Transport != "" {
+					rawTransport, err := json.Marshal(def.Transport)
+					if err != nil {
+						return fmt.Errorf("encode transport for server %q: %w", serverName, err)
+					}
+					base["transport"] = rawTransport
+				}
+
+				// Remove stdio-only fields.
+				delete(base, "command")
 				delete(base, "args")
-			}
-
-			if len(def.Env) > 0 {
-				rawEnv, err := json.Marshal(def.Env)
-				if err != nil {
-					return fmt.Errorf("encode env for server %q: %w", serverName, err)
-				}
-				base["env"] = rawEnv
-			} else {
 				delete(base, "env")
+			} else if strings.TrimSpace(def.Command) != "" {
+				rawCmd, err := json.Marshal(def.Command)
+				if err != nil {
+					return fmt.Errorf("encode command for server %q: %w", serverName, err)
+				}
+				base["command"] = rawCmd
+
+				if len(def.Args) > 0 {
+					rawArgs, err := json.Marshal(def.Args)
+					if err != nil {
+						return fmt.Errorf("encode args for server %q: %w", serverName, err)
+					}
+					base["args"] = rawArgs
+				} else {
+					delete(base, "args")
+				}
+
+				if len(def.Env) > 0 {
+					rawEnv, err := json.Marshal(def.Env)
+					if err != nil {
+						return fmt.Errorf("encode env for server %q: %w", serverName, err)
+					}
+					base["env"] = rawEnv
+				} else {
+					delete(base, "env")
+				}
+
+				// Remove HTTP-only fields.
+				delete(base, "url")
+				delete(base, "headers")
+				delete(base, "transport")
 			}
 		}
 

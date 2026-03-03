@@ -94,7 +94,7 @@ func completeSuggestions(words []string) []string {
 			"--client", "--server", "--env", "--update", "--dry-run", "--json", "--verbose", "--yes"))
 	case "add":
 		return uniqueSortedStrings(append(registry.Names(),
-			"--command", "--arg", "--env", "--description", "--update"))
+			"--command", "--arg", "--env", "--url", "--header", "--transport", "--description", "--update"))
 	case "list":
 		return []string{"--client", "--json", "--verbose"}
 	case "export":
