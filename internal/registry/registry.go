@@ -115,7 +115,7 @@ var catalog = []Template{
 	{
 		Name:        "filesystem",
 		Command:     "npx",
-		Args:        []string{"-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"},
+		Args:        []string{"-y", "@modelcontextprotocol/server-filesystem", "."},
 		Tools:       []string{"list_directory", "read_file", "write_file", "search_files"},
 		Description: "Filesystem - read, write, search files in allowed directories",
 		Category:    "utility",
@@ -157,7 +157,7 @@ var catalog = []Template{
 	{
 		Name:        "playwright",
 		Command:     "npx",
-		Args:        []string{"-y", "@anthropic/mcp-playwright"},
+		Args:        []string{"-y", "@playwright/mcp@latest"},
 		Description: "Playwright - browser automation, screenshots, testing",
 		Category:    "automation",
 	},

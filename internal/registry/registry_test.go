@@ -65,3 +65,28 @@ func TestCategoriesSortedUnique(t *testing.T) {
 		seen[cat] = struct{}{}
 	}
 }
+
+func TestPlaywrightTemplateUsesOfficialPackage(t *testing.T) {
+	tmpl, ok := Lookup("playwright")
+	if !ok {
+		t.Fatalf("expected playwright template to exist")
+	}
+	if tmpl.Command != "npx" {
+		t.Fatalf("expected playwright command npx, got %q", tmpl.Command)
+	}
+	expectedArgs := []string{"-y", "@playwright/mcp@latest"}
+	if !slices.Equal(tmpl.Args, expectedArgs) {
+		t.Fatalf("expected playwright args %v, got %v", expectedArgs, tmpl.Args)
+	}
+}
+
+func TestFilesystemTemplateUsesRealDefaultPath(t *testing.T) {
+	tmpl, ok := Lookup("filesystem")
+	if !ok {
+		t.Fatalf("expected filesystem template to exist")
+	}
+	expectedArgs := []string{"-y", "@modelcontextprotocol/server-filesystem", "."}
+	if !slices.Equal(tmpl.Args, expectedArgs) {
+		t.Fatalf("expected filesystem args %v, got %v", expectedArgs, tmpl.Args)
+	}
+}
