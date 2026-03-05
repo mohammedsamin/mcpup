@@ -12,18 +12,39 @@ type EnvVar struct {
 	Hint     string `json:"hint,omitempty"`
 }
 
+// PromptInput describes a user-facing setup input for a template.
+type PromptInput struct {
+	ID       string `json:"id"`
+	Label    string `json:"label,omitempty"`
+	Required bool   `json:"required,omitempty"`
+	Hint     string `json:"hint,omitempty"`
+}
+
+// LegacyMatcher identifies a known stale server definition shape.
+type LegacyMatcher struct {
+	Command   string   `json:"command,omitempty"`
+	Args      []string `json:"args,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	Transport string   `json:"transport,omitempty"`
+	EnvKeys   []string `json:"envKeys,omitempty"`
+}
+
 // Template is a known MCP server definition in the built-in catalog.
 type Template struct {
-	Name        string            `json:"name"`
-	Command     string            `json:"command,omitempty"`
-	Args        []string          `json:"args,omitempty"`
-	URL         string            `json:"url,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	Transport   string            `json:"transport,omitempty"`
-	Tools       []string          `json:"tools,omitempty"`
-	EnvVars     []EnvVar          `json:"envVars,omitempty"`
-	Description string            `json:"description"`
-	Category    string            `json:"category"`
+	Name           string            `json:"name"`
+	Command        string            `json:"command,omitempty"`
+	Args           []string          `json:"args,omitempty"`
+	URL            string            `json:"url,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	Transport      string            `json:"transport,omitempty"`
+	Tools          []string          `json:"tools,omitempty"`
+	EnvVars        []EnvVar          `json:"envVars,omitempty"`
+	PromptInputs   []PromptInput     `json:"promptInputs,omitempty"`
+	RenderEnv      map[string]string `json:"renderEnv,omitempty"`
+	RenderHeaders  map[string]string `json:"renderHeaders,omitempty"`
+	LegacyMatchers []LegacyMatcher   `json:"legacyMatchers,omitempty"`
+	Description    string            `json:"description"`
+	Category       string            `json:"category"`
 }
 
 // catalog is the built-in set of known MCP servers.
@@ -245,10 +266,17 @@ var catalog = []Template{
 		Category:    "productivity",
 	},
 	{
-		Name:        "notion",
-		Command:     "npx",
-		Args:        []string{"-y", "@notionhq/notion-mcp-server"},
-		EnvVars:     []EnvVar{{Key: "OPENAPI_MCP_HEADERS", Required: true, Hint: "JSON headers incl. Notion token"}},
+		Name:         "notion",
+		Command:      "npx",
+		Args:         []string{"-y", "@notionhq/notion-mcp-server"},
+		EnvVars:      []EnvVar{{Key: "NOTION_TOKEN", Required: true, Hint: "https://www.notion.so/profile/integrations"}},
+		PromptInputs: []PromptInput{{ID: "NOTION_TOKEN", Label: "Notion token", Required: true, Hint: "https://www.notion.so/profile/integrations"}},
+		RenderEnv:    map[string]string{"NOTION_TOKEN": "{{NOTION_TOKEN}}"},
+		LegacyMatchers: []LegacyMatcher{{
+			Command: "npx",
+			Args:    []string{"-y", "@notionhq/notion-mcp-server"},
+			EnvKeys: []string{"OPENAPI_MCP_HEADERS"},
+		}},
 		Description: "Notion pages and database operations",
 		Category:    "productivity",
 	},
@@ -314,9 +342,13 @@ var catalog = []Template{
 		Category:    "utility",
 	},
 	{
-		Name:        "filesystem",
-		Command:     "npx",
-		Args:        []string{"-y", "@modelcontextprotocol/server-filesystem", "."},
+		Name:    "filesystem",
+		Command: "npx",
+		Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "."},
+		LegacyMatchers: []LegacyMatcher{{
+			Command: "npx",
+			Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"},
+		}},
 		Tools:       []string{"list_directory", "read_file", "write_file", "search_files"},
 		Description: "Scoped local filesystem read and write tools",
 		Category:    "utility",
@@ -468,9 +500,13 @@ var catalog = []Template{
 		Category:    "automation",
 	},
 	{
-		Name:        "playwright",
-		Command:     "npx",
-		Args:        []string{"-y", "@playwright/mcp@latest"},
+		Name:    "playwright",
+		Command: "npx",
+		Args:    []string{"-y", "@playwright/mcp@latest"},
+		LegacyMatchers: []LegacyMatcher{{
+			Command: "npx",
+			Args:    []string{"-y", "@anthropic/mcp-playwright"},
+		}},
 		Description: "Browser automation, screenshots, and testing",
 		Category:    "automation",
 	},
@@ -491,10 +527,14 @@ var catalog = []Template{
 		Category:    "media",
 	},
 	{
-		Name:        "elevenlabs",
-		Command:     "uvx",
-		Args:        []string{"elevenlabs-mcp"},
-		EnvVars:     []EnvVar{{Key: "ELEVENLABS_API_KEY", Required: true, Hint: "https://elevenlabs.io/app/settings/api-keys"}},
+		Name:    "elevenlabs",
+		Command: "uvx",
+		Args:    []string{"elevenlabs-mcp"},
+		EnvVars: []EnvVar{{Key: "ELEVENLABS_API_KEY", Required: true, Hint: "https://elevenlabs.io/app/settings/api-keys"}},
+		LegacyMatchers: []LegacyMatcher{{
+			Command: "npx",
+			Args:    []string{"-y", "@anthropic/mcp-elevenlabs"},
+		}},
 		Description: "Voice generation and text-to-speech",
 		Category:    "media",
 	},

@@ -224,6 +224,21 @@ func RunDoctor(configPath string, workspace string) (Report, error) {
 	for serverName, serverDef := range cfg.Servers {
 		enabledAnywhere := serverEnabledAnywhere(cfg, serverName)
 		if tmpl, ok := registry.Lookup(serverName); ok {
+			if reason := registry.LegacyDefinitionReason(serverName, serverDef); reason != "" {
+				report.Checks = append(report.Checks, Check{
+					Key:        "registry.legacy." + serverName,
+					Status:     StatusWarn,
+					Message:    fmt.Sprintf("server uses a legacy registry definition: %s", reason),
+					Suggestion: fmt.Sprintf("run `mcpup update %s --yes` to migrate to the current template", serverName),
+				})
+			} else {
+				report.Checks = append(report.Checks, Check{
+					Key:     "registry.legacy." + serverName,
+					Status:  StatusPass,
+					Message: "server does not match a known legacy registry definition",
+				})
+			}
+
 			missingEnv := missingRequiredEnv(serverDef, tmpl)
 			if enabledAnywhere && len(missingEnv) > 0 {
 				report.Checks = append(report.Checks, Check{

@@ -278,53 +278,7 @@ func setupServerFromTemplate(
 	if server.Env == nil {
 		server.Env = map[string]string{}
 	}
-
-	for key, value := range envOverrides {
-		server.Env[key] = value
-	}
-
-	for _, ev := range tmpl.EnvVars {
-		if strings.TrimSpace(server.Env[ev.Key]) != "" {
-			continue
-		}
-
-		defaultVal := strings.TrimSpace(os.Getenv(ev.Key))
-		if interactive {
-			label := fmt.Sprintf("%s for %s", ev.Key, tmpl.Name)
-			if ev.Hint != "" {
-				label += " " + output.Dim("("+ev.Hint+")")
-			}
-			if ev.Required {
-				label += output.Red(" [required]")
-			}
-			value, err := output.Input(in, out, label+":", defaultVal)
-			if err != nil {
-				return "", err
-			}
-			value = strings.TrimSpace(value)
-			if value == "" {
-				if ev.Required {
-					return "", fmt.Errorf("%s is required for %s", ev.Key, tmpl.Name)
-				}
-				continue
-			}
-			server.Env[ev.Key] = value
-			continue
-		}
-
-		if defaultVal != "" {
-			server.Env[ev.Key] = defaultVal
-			continue
-		}
-		if ev.Required {
-			hint := ""
-			if ev.Hint != "" {
-				hint = fmt.Sprintf(" (get it from %s)", ev.Hint)
-			}
-			return "", fmt.Errorf("%w: server %q requires --env %s=<value>%s", errUsage, tmpl.Name, ev.Key, hint)
-		}
-	}
-	if err := validateRegistryServerDefinition(tmpl.Name, tmpl, server); err != nil {
+	if err := applyTemplateInputs(&server, tmpl, envOverrides, interactive, in, out); err != nil {
 		return "", err
 	}
 

@@ -49,6 +49,28 @@ func TestAddRegistryTemplateFailsWhenLauncherMissing(t *testing.T) {
 	}
 }
 
+func TestAddRegistryNotionAcceptsTokenInput(t *testing.T) {
+	env := setupTestEnv(t)
+	runCLI(t, env, "init")
+
+	runCLI(t, env, "add", "notion", "--env", "NOTION_TOKEN=ntn_123")
+
+	cfg, err := store.LoadConfig(env.configPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	srv, ok := cfg.Servers["notion"]
+	if !ok {
+		t.Fatalf("expected notion server in canonical config")
+	}
+	if srv.Env["NOTION_TOKEN"] != "ntn_123" {
+		t.Fatalf("expected NOTION_TOKEN to be stored, got %+v", srv.Env)
+	}
+	if _, ok := srv.Env["OPENAPI_MCP_HEADERS"]; ok {
+		t.Fatalf("did not expect OPENAPI_MCP_HEADERS to be stored")
+	}
+}
+
 func TestRemoveErrorsOnMissing(t *testing.T) {
 	env := setupTestEnv(t)
 	runCLI(t, env, "init")

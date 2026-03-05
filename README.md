@@ -151,7 +151,7 @@ Add any of them with just the name:
 
 ```bash
 mcpup add github --env GITHUB_TOKEN=ghp_xxx
-mcpup add notion --env OPENAPI_MCP_HEADERS='{"Authorization":"Bearer ntn_xxx","Notion-Version":"2022-06-28"}'
+mcpup add notion --env NOTION_TOKEN=ntn_xxx
 mcpup add playwright
 mcpup add memory
 ```
@@ -285,7 +285,7 @@ mcpup enable company-server --client claude-code
 ```bash
 mcpup add github --env GITHUB_TOKEN=ghp_xxx
 mcpup add slack --env SLACK_BOT_TOKEN=xoxb-xxx
-mcpup add notion --env OPENAPI_MCP_HEADERS='{"Authorization":"Bearer ntn_xxx","Notion-Version":"2022-06-28"}'
+mcpup add notion --env NOTION_TOKEN=ntn_xxx
 mcpup add sentry --env SENTRY_AUTH_TOKEN=sntrys_xxx
 
 mcpup profile create work --servers github,slack,notion,sentry

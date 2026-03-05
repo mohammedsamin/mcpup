@@ -287,26 +287,6 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 		if strings.TrimSpace(*description) == "" {
 			*description = tmpl.Description
 		}
-		// Validate that required env vars are provided.
-		for _, ev := range tmpl.EnvVars {
-			if ev.Required {
-				found := false
-				for _, kv := range envVars {
-					key, _, _ := strings.Cut(kv, "=")
-					if strings.TrimSpace(key) == ev.Key {
-						found = true
-						break
-					}
-				}
-				if !found {
-					hint := ""
-					if ev.Hint != "" {
-						hint = fmt.Sprintf(" (get it from %s)", ev.Hint)
-					}
-					return fmt.Errorf("%w: server %q requires --%s %s=<value>%s", errUsage, fs.Arg(0), "env", ev.Key, hint)
-				}
-			}
-		}
 	}
 
 	// Validate transport value.
@@ -358,7 +338,7 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 		}
 	}
 	if usingRegistryTemplate {
-		if err := validateRegistryServerDefinition(fs.Arg(0), registryTemplate, server); err != nil {
+		if err := applyTemplateInputs(&server, registryTemplate, envMap, false, nil, out); err != nil {
 			return err
 		}
 	}

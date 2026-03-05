@@ -41,7 +41,7 @@ func TestAddRegistryTemplateRequiresEnv(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected add github without required env to fail")
 	}
-	if !strings.Contains(err.Error(), "requires --env GITHUB_TOKEN=<value>") {
+	if !strings.Contains(err.Error(), "GITHUB_TOKEN is required for github") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

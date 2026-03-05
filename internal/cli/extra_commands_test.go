@@ -64,6 +64,32 @@ func TestUpdateDoesNotPersistCanonicalChangeWhenClientReconcileFails(t *testing.
 	}
 }
 
+func TestUpdateMigratesLegacyNotionHeadersToToken(t *testing.T) {
+	env := setupTestEnv(t)
+	runCLI(t, env, "init")
+	runCLI(t, env,
+		"add", "notion",
+		"--command", "npx",
+		"--arg", "-y",
+		"--arg", "@notionhq/notion-mcp-server",
+		"--env", `OPENAPI_MCP_HEADERS={"Authorization":"Bearer ntn_123","Notion-Version":"2022-06-28"}`,
+	)
+
+	runCLI(t, env, "update", "notion", "--yes")
+
+	cfg, err := store.LoadConfig(env.configPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	srv := cfg.Servers["notion"]
+	if srv.Env["NOTION_TOKEN"] != "ntn_123" {
+		t.Fatalf("expected NOTION_TOKEN after migration, got %+v", srv.Env)
+	}
+	if _, ok := srv.Env["OPENAPI_MCP_HEADERS"]; ok {
+		t.Fatalf("expected OPENAPI_MCP_HEADERS to be removed after migration")
+	}
+}
+
 func TestExportImportRoundTrip(t *testing.T) {
 	envA := setupTestEnv(t)
 	runCLI(t, envA, "init")

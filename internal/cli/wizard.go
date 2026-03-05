@@ -200,34 +200,13 @@ func (w *wizard) selectRegistryTemplate(templates []registry.Template, question 
 }
 
 func (w *wizard) addRegistryTemplate(tmpl registry.Template) error {
-	// Collect required env vars.
-	envMap := map[string]string{}
-	for _, ev := range tmpl.EnvVars {
-		label := ev.Key
-		if ev.Hint != "" {
-			label += output.Dim("  " + ev.Hint)
-		}
-		if ev.Required {
-			label += output.Red(" (required)")
-		}
-		val, err := output.Input(w.in, w.out, label+":", "")
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(val) != "" {
-			envMap[ev.Key] = strings.TrimSpace(val)
-		} else if ev.Required {
-			return fmt.Errorf("%s is required for %s", ev.Key, tmpl.Name)
-		}
-	}
-
 	path, cfg, err := store.EnsureConfig("")
 	if err != nil {
 		return err
 	}
 
-	server := serverFromTemplate(tmpl, envMap)
-	if err := validateRegistryServerDefinition(tmpl.Name, tmpl, server); err != nil {
+	server := serverFromTemplate(tmpl, nil)
+	if err := applyTemplateInputs(&server, tmpl, nil, true, w.in, w.out); err != nil {
 		return err
 	}
 
