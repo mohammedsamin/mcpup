@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 func TestAddErrorsOnDuplicate(t *testing.T) {
@@ -80,6 +82,33 @@ func TestRemoveReconcilesClientConfig(t *testing.T) {
 	}
 }
 
+func TestRemoveDoesNotPersistCanonicalChangeWhenClientReconcileFails(t *testing.T) {
+	env := setupTestEnv(t)
+	runCLI(t, env, "init")
+	runCLI(t, env, "add", "github", "--command", "echo", "--arg", "gh")
+	runCLI(t, env, "enable", "github", "--client", "cursor")
+
+	cursorPath := filepath.Join(env.home, ".cursor", "mcp.json")
+	if err := os.WriteFile(cursorPath, []byte(`{"mcpServers":`), 0o644); err != nil {
+		t.Fatalf("corrupt cursor config: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := Run([]string{"remove", "github", "--yes"}, nil, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected remove to fail when client reconcile fails")
+	}
+
+	cfg, loadErr := store.LoadConfig(env.configPath)
+	if loadErr != nil {
+		t.Fatalf("load config after failed remove: %v", loadErr)
+	}
+	if _, ok := cfg.Servers["github"]; !ok {
+		t.Fatalf("expected canonical config to keep github after failed remove")
+	}
+}
+
 func TestEnableIsIdempotent(t *testing.T) {
 	env := setupTestEnv(t)
 	runCLI(t, env, "init")
@@ -123,6 +152,82 @@ func TestDryRunDoesNotWriteClientConfig(t *testing.T) {
 	}
 	if string(after) != string(initial) {
 		t.Fatalf("dry-run modified cursor config")
+	}
+}
+
+func TestApplyClientMutationsOnlyPersistsSuccessfulClients(t *testing.T) {
+	env := setupTestEnv(t)
+	runCLI(t, env, "init")
+	runCLI(t, env, "add", "github", "--command", "echo", "--arg", "gh")
+
+	cursorPath := filepath.Join(env.home, ".cursor", "mcp.json")
+	if err := os.MkdirAll(filepath.Dir(cursorPath), 0o755); err != nil {
+		t.Fatalf("mkdir cursor dir: %v", err)
+	}
+	if err := os.WriteFile(cursorPath, []byte(`{"mcpServers":`), 0o644); err != nil {
+		t.Fatalf("corrupt cursor config: %v", err)
+	}
+
+	cfg, err := store.LoadConfig(env.configPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	nextCfg, results, failures, err := applyClientMutations(cfg, []string{"cursor", "codex"}, "enable", false,
+		func(candidate *store.Config, client string) error {
+			return store.SetClientServerEnabled(candidate, client, "github", true)
+		},
+	)
+	if err != nil {
+		t.Fatalf("applyClientMutations failed: %v", err)
+	}
+	if len(results) != 1 || results[0].Client != "codex" {
+		t.Fatalf("expected only codex to succeed, got %+v", results)
+	}
+	if failures["cursor"] == nil {
+		t.Fatalf("expected cursor failure to be recorded")
+	}
+	if nextCfg.Clients["cursor"].Servers["github"].Enabled {
+		t.Fatalf("failed client mutation leaked into returned config")
+	}
+	if !nextCfg.Clients["codex"].Servers["github"].Enabled {
+		t.Fatalf("successful client mutation missing from returned config")
+	}
+}
+
+func TestImportUsesRegistryDefinitionsAndSkipsUnknownServers(t *testing.T) {
+	env := setupTestEnv(t)
+
+	cursorPath := filepath.Join(env.home, ".cursor", "mcp.json")
+	if err := os.MkdirAll(filepath.Dir(cursorPath), 0o755); err != nil {
+		t.Fatalf("mkdir cursor dir: %v", err)
+	}
+	body := []byte(`{
+  "mcpServers": {
+    "github": {"command":"anything","enabled":true},
+    "custom-server": {"command":"anything","enabled":true}
+  }
+}` + "\n")
+	if err := os.WriteFile(cursorPath, body, 0o644); err != nil {
+		t.Fatalf("write cursor config: %v", err)
+	}
+
+	runCLI(t, env, "init", "--import")
+
+	cfg, err := store.LoadConfig(env.configPath)
+	if err != nil {
+		t.Fatalf("load config after import: %v", err)
+	}
+	if cfg.Servers["github"].Command != "npx" {
+		t.Fatalf("expected imported github to use registry definition, got %q", cfg.Servers["github"].Command)
+	}
+	if _, ok := cfg.Servers["custom-server"]; ok {
+		t.Fatalf("expected unknown imported server to be skipped")
+	}
+	for name, srv := range cfg.Servers {
+		if srv.Command == "unknown" {
+			t.Fatalf("server %q still uses placeholder command \"unknown\"", name)
+		}
 	}
 }
 

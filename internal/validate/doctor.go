@@ -227,8 +227,12 @@ func RunDoctor(configPath string, workspace string) (Report, error) {
 
 func checkWriteAccess(path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	info, err := os.Stat(dir)
+	if err != nil {
 		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", dir)
 	}
 
 	testFile, err := os.CreateTemp(dir, ".mcpup-write-check-*.tmp")

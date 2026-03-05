@@ -31,6 +31,9 @@ func TestRunDoctorWithValidCanonicalConfig(t *testing.T) {
 	if len(report.Checks) == 0 {
 		t.Fatalf("expected checks in report")
 	}
+	if _, err := os.Stat(filepath.Join(home, ".cursor")); !os.IsNotExist(err) {
+		t.Fatalf("doctor should not create client config directories, got err=%v", err)
+	}
 }
 
 func TestRunDoctorFailsSchemaCheckForInvalidConfig(t *testing.T) {

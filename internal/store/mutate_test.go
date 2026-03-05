@@ -129,3 +129,44 @@ func TestClientServerAndToolUpdates(t *testing.T) {
 		t.Fatalf("unexpected disabled tools: %v", state.DisabledTools)
 	}
 }
+
+func TestCloneConfigDeepCopiesNestedState(t *testing.T) {
+	cfg := NewDefaultConfig()
+	cfg.Servers["github"] = Server{
+		Command: "npx",
+		Args:    []string{"-y", "@modelcontextprotocol/server-github"},
+		Env:     map[string]string{"GITHUB_TOKEN": "a"},
+	}
+	cfg.Clients["cursor"] = ClientConfig{
+		Servers: map[string]ServerState{
+			"github": {
+				Enabled:       true,
+				EnabledTools:  []string{"search"},
+				DisabledTools: []string{"delete"},
+			},
+		},
+	}
+	cfg.Profiles["coding"] = Profile{
+		Servers: []string{"github"},
+		Tools: map[string]ToolSelection{
+			"github": {
+				Enabled: []string{"search"},
+			},
+		},
+	}
+
+	clone := CloneConfig(cfg)
+	clone.Servers["github"] = Server{Command: "changed"}
+	clone.Clients["cursor"].Servers["github"] = ServerState{Enabled: false}
+	clone.Profiles["coding"] = Profile{Servers: []string{"other"}}
+
+	if cfg.Servers["github"].Command != "npx" {
+		t.Fatalf("mutating clone should not affect original server")
+	}
+	if !cfg.Clients["cursor"].Servers["github"].Enabled {
+		t.Fatalf("mutating clone should not affect original client state")
+	}
+	if cfg.Profiles["coding"].Servers[0] != "github" {
+		t.Fatalf("mutating clone should not affect original profile")
+	}
+}

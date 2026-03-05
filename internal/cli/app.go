@@ -424,19 +424,20 @@ func runRemove(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 	serverName := args[0]
 	affectedClients := clientsReferencingServer(cfg, serverName)
 
-	if err := store.RemoveServer(&cfg, serverName); err != nil {
+	candidate := store.CloneConfig(cfg)
+	if err := store.RemoveServer(&candidate, serverName); err != nil {
+		return err
+	}
+
+	clientResults, err := reconcileClientsTransactional(candidate, affectedClients, "remove", opts.DryRun)
+	if err != nil {
 		return err
 	}
 
 	if !opts.DryRun {
-		if err := store.SaveConfig(path, cfg); err != nil {
+		if err := store.SaveConfig(path, candidate); err != nil {
 			return err
 		}
-	}
-
-	clientResults, err := reconcileClients(cfg, affectedClients, "remove", opts.DryRun)
-	if err != nil {
-		return err
 	}
 
 	message := fmt.Sprintf("server %q removed", serverName)
@@ -449,11 +450,11 @@ func runRemove(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 		Status:  "ok",
 		Message: message,
 		Data: map[string]any{
-			"name":             serverName,
-			"clients":          affectedClients,
+			"name":              serverName,
+			"clients":           affectedClients,
 			"reconciledClients": len(clientResults),
-			"clientResults":    clientResults,
-			"dryRun":           opts.DryRun,
+			"clientResults":     clientResults,
+			"dryRun":            opts.DryRun,
 		},
 	})
 }
@@ -1153,7 +1154,9 @@ func runRollback(opts GlobalOptions, args []string, out io.Writer) error {
 						}
 					}
 					cfg.Clients[*client] = clientCfg
-					_ = store.SaveConfig(cfgPath, cfg)
+					if err := store.SaveConfig(cfgPath, cfg); err != nil {
+						return fmt.Errorf("rollback restored client config, but failed to sync canonical config: %w", err)
+					}
 				}
 			}
 		}
@@ -1368,16 +1371,14 @@ func importClientStates(cfg *store.Config, reconciler *core.Reconciler, workspac
 		if err != nil {
 			continue
 		}
-		if len(state.Servers) == 0 {
-			continue
-		}
-
-		importedClients++
+		importedClient := false
 		for serverName, serverState := range state.Servers {
 			if _, exists := cfg.Servers[serverName]; !exists {
-				cfg.Servers[serverName] = store.Server{
-					Command: "unknown",
+				tmpl, ok := registry.Lookup(serverName)
+				if !ok {
+					continue
 				}
+				cfg.Servers[serverName] = serverFromTemplate(tmpl, nil)
 				importedServers++
 			}
 			clientState := cfg.Clients[client]
@@ -1390,6 +1391,10 @@ func importClientStates(cfg *store.Config, reconciler *core.Reconciler, workspac
 				DisabledTools: append([]string{}, serverState.DisabledTools...),
 			}
 			cfg.Clients[client] = clientState
+			importedClient = true
+		}
+		if importedClient {
+			importedClients++
 		}
 	}
 

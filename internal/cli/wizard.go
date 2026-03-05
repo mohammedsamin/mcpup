@@ -11,7 +11,6 @@ import (
 	"github.com/mohammedsamin/mcpup/internal/backup"
 	"github.com/mohammedsamin/mcpup/internal/core"
 	"github.com/mohammedsamin/mcpup/internal/output"
-	"github.com/mohammedsamin/mcpup/internal/planner"
 	"github.com/mohammedsamin/mcpup/internal/profile"
 	"github.com/mohammedsamin/mcpup/internal/registry"
 	"github.com/mohammedsamin/mcpup/internal/store"
@@ -223,12 +222,7 @@ func (w *wizard) addRegistryTemplate(tmpl registry.Template) error {
 		return err
 	}
 
-	server := store.Server{
-		Command:     tmpl.Command,
-		Args:        tmpl.Args,
-		Env:         envMap,
-		Description: tmpl.Description,
-	}
+	server := serverFromTemplate(tmpl, envMap)
 
 	if err := store.AddServer(&cfg, tmpl.Name, server); err != nil {
 		if strings.Contains(err.Error(), "already exists") {
@@ -436,14 +430,15 @@ func (w *wizard) removeServer() error {
 		return fmt.Errorf("aborted")
 	}
 
-	if err := store.RemoveServer(&cfg, name); err != nil {
+	candidate := store.CloneConfig(cfg)
+	if err := store.RemoveServer(&candidate, name); err != nil {
 		return err
 	}
-	if err := store.SaveConfig(path, cfg); err != nil {
-		return err
-	}
-	results, err := reconcileClients(cfg, affectedClients, "remove", false)
+	results, err := reconcileClientsTransactional(candidate, affectedClients, "remove", false)
 	if err != nil {
+		return err
+	}
+	if err := store.SaveConfig(path, candidate); err != nil {
 		return err
 	}
 
@@ -522,52 +517,29 @@ func (w *wizard) enableDisable() error {
 		}
 	}
 
-	reconciler, err := core.NewReconciler()
+	nextCfg, _, failures, err := applyClientMutations(cfg, selectedClientNames(clientIndices), action, false,
+		func(candidate *store.Config, client string) error {
+			if toolMode {
+				for _, tool := range selectedTools {
+					if err := store.SetClientToolEnabled(candidate, client, serverName, tool, enable); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			return store.SetClientServerEnabled(candidate, client, serverName, enable)
+		},
+	)
 	if err != nil {
 		return err
 	}
-	workspace, _ := os.Getwd()
 
 	successes := 0
-	for _, ci := range clientIndices {
-		client := store.SupportedClients[ci]
-
-		if toolMode {
-			toolErr := false
-			for _, tool := range selectedTools {
-				if err := store.SetClientToolEnabled(&cfg, client, serverName, tool, enable); err != nil {
-					fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
-					toolErr = true
-					break
-				}
-			}
-			if toolErr {
-				continue
-			}
-		} else {
-			if err := store.SetClientServerEnabled(&cfg, client, serverName, enable); err != nil {
-				fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
-				continue
-			}
-		}
-
-		desired, err := planner.DesiredStateForClient(cfg, client)
-		if err != nil {
+	for _, client := range selectedClientNames(clientIndices) {
+		if err, failed := failures[client]; failed {
 			fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
 			continue
 		}
-
-		_, err = reconciler.ReconcileClient(desired, core.ReconcileOptions{
-			Client:          client,
-			Workspace:       workspace,
-			CommandName:     action,
-			BackupRetention: 20,
-		})
-		if err != nil {
-			fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
-			continue
-		}
-
 		if toolMode {
 			fmt.Fprintf(w.out, "  %s %sd tools (%s) on %s (%s)\n",
 				output.Green(output.SymbolOK), action, strings.Join(selectedTools, ", "),
@@ -580,7 +552,7 @@ func (w *wizard) enableDisable() error {
 	}
 
 	if successes > 0 {
-		if err := store.SaveConfig(path, cfg); err != nil {
+		if err := store.SaveConfig(path, nextCfg); err != nil {
 			return err
 		}
 	}
@@ -602,41 +574,29 @@ func (w *wizard) enableServerOnClients(serverName string) error {
 		return err
 	}
 
-	reconciler, err := core.NewReconciler()
+	nextCfg, _, failures, err := applyClientMutations(cfg, selectedClientNames(clientIndices), "enable", false,
+		func(candidate *store.Config, client string) error {
+			return store.SetClientServerEnabled(candidate, client, serverName, true)
+		},
+	)
 	if err != nil {
 		return err
 	}
-	workspace, _ := os.Getwd()
 
-	for _, ci := range clientIndices {
-		client := store.SupportedClients[ci]
-
-		if err := store.SetClientServerEnabled(&cfg, client, serverName, true); err != nil {
+	successes := 0
+	for _, client := range selectedClientNames(clientIndices) {
+		if err, failed := failures[client]; failed {
 			fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
 			continue
 		}
-
-		desired, err := planner.DesiredStateForClient(cfg, client)
-		if err != nil {
-			fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
-			continue
-		}
-
-		_, err = reconciler.ReconcileClient(desired, core.ReconcileOptions{
-			Client:          client,
-			Workspace:       workspace,
-			CommandName:     "enable",
-			BackupRetention: 20,
-		})
-		if err != nil {
-			fmt.Fprintf(w.out, "  %s %s: %v\n", output.Red(output.SymbolErr), client, err)
-			continue
-		}
-
 		fmt.Fprintf(w.out, "  %s enabled on %s\n", output.Green(output.SymbolOK), output.Cyan(client))
+		successes++
 	}
 
-	if err := store.SaveConfig(path, cfg); err != nil {
+	if successes == 0 {
+		return nil
+	}
+	if err := store.SaveConfig(path, nextCfg); err != nil {
 		return err
 	}
 	return nil
@@ -1065,29 +1025,31 @@ func (w *wizard) rollback() error {
 		return err
 	}
 
-	w.syncAfterRollback(client, meta)
+	if err := w.syncAfterRollback(client, meta); err != nil {
+		return err
+	}
 
 	fmt.Fprintf(w.out, "\n%s Restored %s from backup %s\n",
 		output.Green(output.SymbolOK), output.Cyan(client), output.Dim(meta.Timestamp))
 	return nil
 }
 
-func (w *wizard) syncAfterRollback(client string, meta backup.Metadata) {
+func (w *wizard) syncAfterRollback(client string, meta backup.Metadata) error {
 	reconciler, err := core.NewReconciler()
 	if err != nil {
-		return
+		return err
 	}
 	adapter, err := reconciler.Registry.Get(client)
 	if err != nil {
-		return
+		return err
 	}
 	restored, err := adapter.Read(meta.SourcePath)
 	if err != nil {
-		return
+		return err
 	}
 	cfgPath, cfg, err := store.EnsureConfig("")
 	if err != nil {
-		return
+		return err
 	}
 
 	clientCfg := cfg.Clients[client]
@@ -1105,7 +1067,10 @@ func (w *wizard) syncAfterRollback(client string, meta backup.Metadata) {
 		}
 	}
 	cfg.Clients[client] = clientCfg
-	_ = store.SaveConfig(cfgPath, cfg)
+	if err := store.SaveConfig(cfgPath, cfg); err != nil {
+		return fmt.Errorf("restored client config, but failed to sync canonical config: %w", err)
+	}
+	return nil
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1213,4 +1178,12 @@ func wizardToolOptions(cfg store.Config, serverName string, clientIndices []int)
 	}
 	sort.Strings(options)
 	return options
+}
+
+func selectedClientNames(indices []int) []string {
+	clients := make([]string, 0, len(indices))
+	for _, idx := range indices {
+		clients = append(clients, store.SupportedClients[idx])
+	}
+	return clients
 }
