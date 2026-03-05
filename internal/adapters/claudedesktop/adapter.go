@@ -56,7 +56,7 @@ func (a Adapter) Read(path string) (planner.ClientState, error) {
 
 // Apply computes state diff from current to desired.
 func (a Adapter) Apply(current planner.ClientState, desired planner.ClientState) (planner.Plan, error) {
-	return planner.Diff(current, desired), nil
+	return adapters.ManagedDiff(current, desired), nil
 }
 
 // Write writes desired state preserving unknown top-level keys.

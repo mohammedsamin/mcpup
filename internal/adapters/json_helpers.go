@@ -3,15 +3,24 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/mohammedsamin/mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 // JSONDocument preserves unknown top-level keys while manipulating mcpServers.
 type JSONDocument map[string]json.RawMessage
+
+const metaKey = "_mcpup"
+
+type ownershipMetadata struct {
+	ManagedServers []string `json:"managedServers,omitempty"`
+}
 
 // ReadJSONDocument reads a JSON object document from disk.
 func ReadJSONDocument(path string) (JSONDocument, error) {
@@ -38,8 +47,10 @@ func ReadStateFromMCPServers(doc JSONDocument, client string) (planner.ClientSta
 // ReadStateFromServerMap decodes state from a top-level server object key.
 func ReadStateFromServerMap(doc JSONDocument, topLevelKey string, client string) (planner.ClientState, error) {
 	state := planner.ClientState{
-		Client:  client,
-		Servers: map[string]planner.ServerState{},
+		Client:     client,
+		Servers:    map[string]planner.ServerState{},
+		Owned:      managedServersFromDoc(doc),
+		ServerDefs: map[string]store.Server{},
 	}
 
 	raw, ok := doc[topLevelKey]
@@ -79,6 +90,11 @@ func ReadStateFromServerMap(doc JSONDocument, topLevelKey string, client string)
 			EnabledTools:  append([]string{}, enabledTools...),
 			DisabledTools: append([]string{}, disabledTools...),
 		}
+		def, err := DecodeServerDefinitionEntry(entry)
+		if err != nil {
+			return planner.ClientState{}, fmt.Errorf("decode server definition for %q: %w", serverName, err)
+		}
+		state.ServerDefs[serverName] = def
 	}
 
 	return planner.NormalizeState(state), nil
@@ -91,6 +107,7 @@ func WriteStateToMCPServers(path string, doc JSONDocument, desired planner.Clien
 
 // WriteStateToServerMap updates a top-level server object while preserving unknown top-level keys.
 func WriteStateToServerMap(path string, doc JSONDocument, topLevelKey string, desired planner.ClientState) error {
+	normalized := planner.NormalizeState(desired)
 	existingServers := map[string]map[string]json.RawMessage{}
 	if raw, ok := doc[topLevelKey]; ok && len(raw) > 0 {
 		if err := json.Unmarshal(raw, &existingServers); err != nil {
@@ -98,8 +115,23 @@ func WriteStateToServerMap(path string, doc JSONDocument, topLevelKey string, de
 		}
 	}
 
+	managedBefore := managedServersFromDoc(doc)
 	nextServers := map[string]map[string]json.RawMessage{}
-	for serverName, state := range planner.NormalizeState(desired).Servers {
+	for serverName, current := range existingServers {
+		if managedBefore[serverName] {
+			continue
+		}
+		if _, managedNow := normalized.Servers[serverName]; managedNow {
+			continue
+		}
+		base := map[string]json.RawMessage{}
+		for key, value := range current {
+			base[key] = append(json.RawMessage{}, value...)
+		}
+		nextServers[serverName] = base
+	}
+
+	for serverName, state := range normalized.Servers {
 		base := map[string]json.RawMessage{}
 		if current, ok := existingServers[serverName]; ok {
 			for key, value := range current {
@@ -205,6 +237,7 @@ func WriteStateToServerMap(path string, doc JSONDocument, topLevelKey string, de
 		return fmt.Errorf("encode %s: %w", topLevelKey, err)
 	}
 	doc[topLevelKey] = raw
+	setManagedServersInDoc(doc, normalized.Servers)
 
 	body, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -216,6 +249,29 @@ func WriteStateToServerMap(path string, doc JSONDocument, topLevelKey string, de
 		return err
 	}
 	return os.WriteFile(path, body, 0o644)
+}
+
+// ManagedDiff compares desired state against the managed subset of current state.
+func ManagedDiff(current planner.ClientState, desired planner.ClientState) planner.Plan {
+	filtered := filterManagedState(current, desired)
+	plan := planner.Diff(filtered, desired)
+	for serverName := range desired.Servers {
+		desiredDef, ok := desired.ServerDefs[serverName]
+		if !ok {
+			continue
+		}
+		currentDef, currentOK := filtered.ServerDefs[serverName]
+		if currentOK && sameServerDefinition(currentDef, desiredDef) {
+			continue
+		}
+		plan.Changes = append(plan.Changes, planner.Change{
+			Kind:   planner.ChangeUpsertServer,
+			Server: serverName,
+			From:   currentDef,
+			To:     desiredDef,
+		})
+	}
+	return plan
 }
 
 // DeepCopyDocument clones the top-level raw map to avoid mutation surprises.
@@ -248,5 +304,140 @@ func CollectCommandKeys(doc JSONDocument) []string {
 			out = append(out, e.Command)
 		}
 	}
+	return out
+}
+
+func filterManagedState(current planner.ClientState, desired planner.ClientState) planner.ClientState {
+	out := planner.ClientState{
+		Client:     current.Client,
+		Servers:    map[string]planner.ServerState{},
+		Owned:      map[string]bool{},
+		ServerDefs: map[string]store.Server{},
+	}
+
+	for serverName, state := range current.Servers {
+		if current.Owned[serverName] {
+			out.Servers[serverName] = state
+			out.Owned[serverName] = true
+			if def, ok := current.ServerDefs[serverName]; ok {
+				out.ServerDefs[serverName] = def
+			}
+			continue
+		}
+		if _, ok := desired.Servers[serverName]; ok {
+			out.Servers[serverName] = state
+			if def, ok := current.ServerDefs[serverName]; ok {
+				out.ServerDefs[serverName] = def
+			}
+		}
+	}
+
+	return planner.NormalizeState(out)
+}
+
+// DecodeServerDefinitionEntry extracts a store.Server definition from one native server entry.
+func DecodeServerDefinitionEntry(entry map[string]json.RawMessage) (store.Server, error) {
+	def := store.Server{}
+	if raw, ok := entry["command"]; ok {
+		if err := json.Unmarshal(raw, &def.Command); err != nil {
+			return store.Server{}, err
+		}
+	}
+	if raw, ok := entry["args"]; ok {
+		if err := json.Unmarshal(raw, &def.Args); err != nil {
+			return store.Server{}, err
+		}
+	}
+	if raw, ok := entry["env"]; ok {
+		if err := json.Unmarshal(raw, &def.Env); err != nil {
+			return store.Server{}, err
+		}
+	}
+	if raw, ok := entry["url"]; ok {
+		if err := json.Unmarshal(raw, &def.URL); err != nil {
+			return store.Server{}, err
+		}
+	}
+	if raw, ok := entry["headers"]; ok {
+		if err := json.Unmarshal(raw, &def.Headers); err != nil {
+			return store.Server{}, err
+		}
+	}
+	if raw, ok := entry["transport"]; ok {
+		if err := json.Unmarshal(raw, &def.Transport); err != nil {
+			return store.Server{}, err
+		}
+	}
+	return def, nil
+}
+
+func sameServerDefinition(a store.Server, b store.Server) bool {
+	return strings.TrimSpace(a.Command) == strings.TrimSpace(b.Command) &&
+		slices.Equal(a.Args, b.Args) &&
+		maps.Equal(a.Env, b.Env) &&
+		strings.TrimSpace(a.URL) == strings.TrimSpace(b.URL) &&
+		maps.Equal(a.Headers, b.Headers) &&
+		strings.TrimSpace(a.Transport) == strings.TrimSpace(b.Transport) &&
+		strings.TrimSpace(a.Description) == strings.TrimSpace(b.Description)
+}
+
+func managedServersFromDoc(doc JSONDocument) map[string]bool {
+	raw, ok := doc[metaKey]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+
+	var meta ownershipMetadata
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return nil
+	}
+
+	out := make(map[string]bool, len(meta.ManagedServers))
+	for _, name := range meta.ManagedServers {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			out[name] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func setManagedServersInDoc(doc JSONDocument, servers map[string]planner.ServerState) {
+	if len(servers) == 0 {
+		delete(doc, metaKey)
+		return
+	}
+
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	names = normalizeManagedNames(names)
+
+	raw, err := json.Marshal(ownershipMetadata{ManagedServers: names})
+	if err != nil {
+		return
+	}
+	doc[metaKey] = raw
+}
+
+func normalizeManagedNames(names []string) []string {
+	set := make(map[string]struct{}, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := set[name]; ok {
+			continue
+		}
+		set[name] = struct{}{}
+		out = append(out, name)
+	}
+	slices.Sort(out)
 	return out
 }

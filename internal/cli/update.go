@@ -4,27 +4,27 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"sort"
-	"strings"
 
-	"github.com/mohammedsamin/mcpup/internal/core"
 	"github.com/mohammedsamin/mcpup/internal/output"
-	"github.com/mohammedsamin/mcpup/internal/planner"
 	"github.com/mohammedsamin/mcpup/internal/registry"
 	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 type updateCandidate struct {
-	Name            string `json:"name"`
-	FromCommand     string `json:"fromCommand"`
-	ToCommand       string `json:"toCommand"`
-	FromArgs        []string `json:"fromArgs"`
-	ToArgs          []string `json:"toArgs"`
-	FromURL         string `json:"fromURL,omitempty"`
-	ToURL           string `json:"toURL,omitempty"`
-	FromDescription string `json:"fromDescription"`
-	ToDescription   string `json:"toDescription"`
+	Name            string            `json:"name"`
+	FromCommand     string            `json:"fromCommand"`
+	ToCommand       string            `json:"toCommand"`
+	FromArgs        []string          `json:"fromArgs"`
+	ToArgs          []string          `json:"toArgs"`
+	FromURL         string            `json:"fromURL,omitempty"`
+	ToURL           string            `json:"toURL,omitempty"`
+	FromHeaders     map[string]string `json:"fromHeaders,omitempty"`
+	ToHeaders       map[string]string `json:"toHeaders,omitempty"`
+	FromTransport   string            `json:"fromTransport,omitempty"`
+	ToTransport     string            `json:"toTransport,omitempty"`
+	FromDescription string            `json:"fromDescription"`
+	ToDescription   string            `json:"toDescription"`
 }
 
 func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) error {
@@ -76,30 +76,36 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 	sort.Strings(serverNames)
 
 	candidates := make([]updateCandidate, 0, len(serverNames))
+	nextServers := map[string]store.Server{}
 	for _, name := range serverNames {
 		current := cfg.Servers[name]
 		tmpl, ok := registry.Lookup(name)
 		if !ok {
 			continue
 		}
-
-		if current.Command == tmpl.Command &&
-			slices.Equal(current.Args, tmpl.Args) &&
-			current.URL == tmpl.URL &&
-			strings.TrimSpace(current.Description) == strings.TrimSpace(tmpl.Description) {
+		next := mergeServerWithTemplate(current, tmpl)
+		if err := validateRegistryServerDefinition(name, tmpl, next); err != nil {
+			return err
+		}
+		if sameServerDefinition(current, next) {
 			continue
 		}
+		nextServers[name] = next
 
 		candidates = append(candidates, updateCandidate{
 			Name:            name,
 			FromCommand:     current.Command,
-			ToCommand:       tmpl.Command,
+			ToCommand:       next.Command,
 			FromArgs:        append([]string{}, current.Args...),
-			ToArgs:          append([]string{}, tmpl.Args...),
+			ToArgs:          append([]string{}, next.Args...),
 			FromURL:         current.URL,
-			ToURL:           tmpl.URL,
+			ToURL:           next.URL,
+			FromHeaders:     cloneStringMap(current.Headers),
+			ToHeaders:       cloneStringMap(next.Headers),
+			FromTransport:   current.Transport,
+			ToTransport:     next.Transport,
 			FromDescription: current.Description,
-			ToDescription:   tmpl.Description,
+			ToDescription:   next.Description,
 		})
 	}
 
@@ -115,70 +121,38 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 		})
 	}
 
-	if !opts.DryRun && !opts.Yes {
-		if in != nil && output.IsTTY() {
-			confirmed, confirmErr := output.Confirm(in, out,
-				fmt.Sprintf("Apply %d update(s) from the server registry?", len(candidates)), true)
-			if confirmErr != nil {
-				return confirmErr
+	affectedClients := []string{}
+	seenClients := map[string]struct{}{}
+	for _, candidate := range candidates {
+		for _, client := range clientsReferencingServer(cfg, candidate.Name) {
+			if _, ok := seenClients[client]; ok {
+				continue
 			}
-			if !confirmed {
-				return fmt.Errorf("aborted")
-			}
-		} else {
-			return fmt.Errorf("update will modify server definitions; add --yes to confirm")
+			seenClients[client] = struct{}{}
+			affectedClients = append(affectedClients, client)
 		}
+	}
+	if err := requireManagedChangeApproval(opts, in, out,
+		formatChangeSummary("Overwrite managed server definitions", candidateNames(candidates), affectedClients)); err != nil {
+		return err
 	}
 
 	for _, c := range candidates {
-		srv := cfg.Servers[c.Name]
-		srv.Command = c.ToCommand
-		srv.Args = append([]string{}, c.ToArgs...)
-		srv.URL = c.ToURL
-		srv.Description = c.ToDescription
-		cfg.Servers[c.Name] = srv
-	}
-
-	// Persist canonical desired state before reconciliation to avoid drift if
-	// a later client reconcile fails after partially applying changes.
-	if !opts.DryRun {
-		if err := store.SaveConfig(path, cfg); err != nil {
-			return err
-		}
+		cfg.Servers[c.Name] = nextServers[c.Name]
 	}
 
 	updatedNames := map[string]struct{}{}
 	for _, c := range candidates {
 		updatedNames[c.Name] = struct{}{}
 	}
-
-	reconciler, err := core.NewReconciler()
+	clientResults, err := reconcileClientsTransactional(cfg, affectedClients, "update", opts.DryRun)
 	if err != nil {
 		return err
 	}
-	workspace, _ := os.Getwd()
-
-	clientResults := []core.ReconcileResult{}
-	for _, client := range store.SupportedClients {
-		if !clientReferencesAnyUpdatedServer(cfg, client, updatedNames) {
-			continue
+	if !opts.DryRun {
+		if err := store.SaveConfig(path, cfg); err != nil {
+			return err
 		}
-
-		desired, desiredErr := planner.DesiredStateForClient(cfg, client)
-		if desiredErr != nil {
-			return desiredErr
-		}
-		result, recErr := reconciler.ReconcileClient(desired, core.ReconcileOptions{
-			Client:          client,
-			Workspace:       workspace,
-			CommandName:     "update",
-			DryRun:          opts.DryRun,
-			BackupRetention: 20,
-		})
-		if recErr != nil {
-			return recErr
-		}
-		clientResults = append(clientResults, result)
 	}
 
 	message := fmt.Sprintf("%d server definition(s) %s", len(candidates), ternary(opts.DryRun, "would be updated", "updated"))
@@ -189,10 +163,19 @@ func runUpdate(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 		Data: map[string]any{
 			"updated":       len(candidates),
 			"servers":       candidates,
+			"clients":       affectedClients,
 			"clientResults": clientResults,
 			"dryRun":        opts.DryRun,
 		},
 	})
+}
+
+func candidateNames(candidates []updateCandidate) []string {
+	names := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		names = append(names, candidate.Name)
+	}
+	return names
 }
 
 func clientReferencesAnyUpdatedServer(cfg store.Config, client string, updatedNames map[string]struct{}) bool {

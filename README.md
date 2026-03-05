@@ -191,14 +191,17 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
 3. mcpup writes the native config file for each client
 4. Every write creates a backup first
 5. If the write fails, it auto-restores from backup
+6. Manual client entries that mcpup does not own stay untouched
 
 ## Features
 
 - **One config, all clients** — define a server once, enable it on any client
+- **Preserve unmanaged entries** — leaves manual client-only MCP servers untouched
 - **HTTP/SSE transport** — manage remote MCP servers via URL, not just local commands
 - **Interactive wizard** — arrow-key menu for everything, no commands to memorize
 - **Setup command** — guided onboarding to select clients, servers, and required keys
 - **Built-in registry** — 97 curated servers with pre-filled commands and args
+- **Registry preflight** — catches missing launchers and required env before writes
 - **Update command** — refresh registry-backed server definitions with `mcpup update`
 - **Export / Import** — share server packs with `mcpup export` and `mcpup import`
 - **Profiles** — switch between "work", "personal", "debug" setups in one command
@@ -206,7 +209,7 @@ mcpup writes directly to each client's native config file. No proxy, no middlewa
 - **Shell completion** — generate completions for bash/zsh/fish
 - **Auto-backup** — every config write creates a timestamped backup
 - **Rollback** — restore any client config from any backup with one command
-- **Doctor** — diagnose config issues, missing executables, URL validation
+- **Doctor** — diagnose config issues, ownership, drift, missing executables, URL validation
 - **Dry-run** — preview changes without writing anything (`--dry-run`)
 - **JSON output** — pipe to `jq` for scripting (`--json`)
 - **Zero dependencies** — single binary, no runtime requirements

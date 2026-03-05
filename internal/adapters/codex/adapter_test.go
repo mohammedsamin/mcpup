@@ -20,7 +20,7 @@ func TestAdapterDryRunDoesNotWriteFile(t *testing.T) {
 			"github": {
 				Enabled:       true,
 				EnabledTools:  []string{"search_issues"},
-				DisabledTools: []string{"delete_issue"},
+				DisabledTools: nil,
 			},
 		},
 	}
@@ -48,7 +48,7 @@ func TestAdapterRealWritePreservesUnknownKeys(t *testing.T) {
 			"github": {
 				Enabled:       true,
 				EnabledTools:  []string{"search_issues"},
-				DisabledTools: []string{"delete_issue"},
+				DisabledTools: nil,
 			},
 		},
 	}
@@ -60,6 +60,9 @@ func TestAdapterRealWritePreservesUnknownKeys(t *testing.T) {
 	content := string(mustRead(t, tempPath))
 	if !strings.Contains(content, `[core]`) {
 		t.Fatalf("expected unknown core section to be preserved")
+	}
+	if !strings.Contains(content, `[mcp_servers.slack]`) {
+		t.Fatalf("expected unmanaged slack section to be preserved")
 	}
 	if !strings.Contains(content, managedStart) || !strings.Contains(content, managedEnd) {
 		t.Fatalf("expected managed block markers")

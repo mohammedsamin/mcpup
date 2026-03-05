@@ -79,8 +79,11 @@ func TestAdapterRealWritePreservesUnknownKeys(t *testing.T) {
 	if _, ok := rawServers["github"]["metadata"]; !ok {
 		t.Fatalf("expected github.metadata to be preserved")
 	}
-	if _, ok := rawServers["memory"]; ok {
-		t.Fatalf("expected memory server to be removed from desired state")
+	if _, ok := rawServers["memory"]; !ok {
+		t.Fatalf("expected unmanaged memory server to be preserved")
+	}
+	if _, ok := doc["_mcpup"]; !ok {
+		t.Fatalf("expected mcpup ownership metadata to be written")
 	}
 }
 

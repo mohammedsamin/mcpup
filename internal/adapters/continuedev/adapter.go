@@ -1,9 +1,11 @@
 package continuedev
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/mohammedsamin/mcpup/internal/adapters"
 	"github.com/mohammedsamin/mcpup/internal/planner"
@@ -49,12 +51,19 @@ func (a Adapter) Read(path string) (planner.ClientState, error) {
 	if err != nil {
 		return planner.ClientState{}, err
 	}
+	if len(state.Servers) > 0 && len(state.Owned) == 0 {
+		state.Owned = map[string]bool{}
+		for name := range state.Servers {
+			state.Owned[name] = true
+		}
+		state = planner.NormalizeState(state)
+	}
 	return state, nil
 }
 
 // Apply computes state diff from current to desired.
 func (a Adapter) Apply(current planner.ClientState, desired planner.ClientState) (planner.Plan, error) {
-	return planner.Diff(current, desired), nil
+	return adapters.ManagedDiff(current, desired), nil
 }
 
 // Write writes desired state preserving unknown top-level keys.
@@ -64,6 +73,21 @@ func (a Adapter) Write(path string, desired planner.ClientState) error {
 	doc, err := adapters.ReadJSONDocument(path)
 	if err != nil {
 		return err
+	}
+
+	if _, ok := doc["_mcpup"]; !ok {
+		current, readErr := adapters.ReadStateFromMCPServers(doc, ClientName)
+		if readErr == nil && len(current.Servers) > 0 {
+			names := make([]string, 0, len(current.Servers))
+			for name := range current.Servers {
+				names = append(names, name)
+			}
+			slices.Sort(names)
+			raw, marshalErr := json.Marshal(map[string]any{"managedServers": names})
+			if marshalErr == nil {
+				doc["_mcpup"] = raw
+			}
+		}
 	}
 
 	// Ensure HTTP servers have a transport set for Continue's "type" field.

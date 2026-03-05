@@ -9,7 +9,6 @@ import (
 
 	"github.com/mohammedsamin/mcpup/internal/core"
 	"github.com/mohammedsamin/mcpup/internal/output"
-	"github.com/mohammedsamin/mcpup/internal/planner"
 	"github.com/mohammedsamin/mcpup/internal/registry"
 	"github.com/mohammedsamin/mcpup/internal/store"
 )
@@ -108,6 +107,7 @@ func runSetup(opts GlobalOptions, args []string, in *os.File, out io.Writer) err
 	added := 0
 	updated := 0
 	reused := 0
+	updatedNames := []string{}
 	for _, tmpl := range templates {
 		result, setupErr := setupServerFromTemplate(&cfg, tmpl, *updateDefs, envOverrides, interactive, in, out)
 		if setupErr != nil {
@@ -118,6 +118,7 @@ func runSetup(opts GlobalOptions, args []string, in *os.File, out io.Writer) err
 			added++
 		case "updated":
 			updated++
+			updatedNames = append(updatedNames, tmpl.Name)
 		default:
 			reused++
 		}
@@ -131,31 +132,35 @@ func runSetup(opts GlobalOptions, args []string, in *os.File, out io.Writer) err
 		}
 	}
 
-	// Persist canonical desired state before reconciliation to avoid drift if
-	// a later client reconcile fails after partially applying changes.
-	if !opts.DryRun {
-		if err := store.SaveConfig(path, cfg); err != nil {
+	affectedClients := append([]string{}, clients...)
+	if len(updatedNames) > 0 {
+		seen := map[string]struct{}{}
+		for _, client := range affectedClients {
+			seen[client] = struct{}{}
+		}
+		for _, name := range updatedNames {
+			for _, client := range clientsReferencingServer(cfg, name) {
+				if _, ok := seen[client]; ok {
+					continue
+				}
+				seen[client] = struct{}{}
+				affectedClients = append(affectedClients, client)
+			}
+		}
+		if err := requireManagedChangeApproval(opts, in, out,
+			formatChangeSummary("Overwrite managed server definitions", updatedNames, affectedClients)); err != nil {
 			return err
 		}
 	}
 
-	clientResults := make([]core.ReconcileResult, 0, len(clients))
-	for _, client := range clients {
-		desired, err := planner.DesiredStateForClient(cfg, client)
-		if err != nil {
+	clientResults, err := reconcileClientsTransactional(cfg, affectedClients, "setup", opts.DryRun)
+	if err != nil {
+		return err
+	}
+	if !opts.DryRun {
+		if err := store.SaveConfig(path, cfg); err != nil {
 			return err
 		}
-		result, err := reconciler.ReconcileClient(desired, core.ReconcileOptions{
-			Client:          client,
-			Workspace:       workspace,
-			CommandName:     "setup",
-			DryRun:          opts.DryRun,
-			BackupRetention: 20,
-		})
-		if err != nil {
-			return err
-		}
-		clientResults = append(clientResults, result)
 	}
 
 	return printResult(out, opts, output.Result{
@@ -164,6 +169,7 @@ func runSetup(opts GlobalOptions, args []string, in *os.File, out io.Writer) err
 		Message: fmt.Sprintf("setup %s for %d server(s) on %d client(s)", ternary(opts.DryRun, "planned", "completed"), len(templates), len(clients)),
 		Data: map[string]any{
 			"clients":       clients,
+			"affected":      affectedClients,
 			"servers":       serverNames,
 			"added":         added,
 			"updated":       updated,
@@ -318,12 +324,18 @@ func setupServerFromTemplate(
 			return "", fmt.Errorf("%w: server %q requires --env %s=<value>%s", errUsage, tmpl.Name, ev.Key, hint)
 		}
 	}
+	if err := validateRegistryServerDefinition(tmpl.Name, tmpl, server); err != nil {
+		return "", err
+	}
 
 	if !exists {
 		if err := store.AddServer(cfg, tmpl.Name, server); err != nil {
 			return "", err
 		}
 		return "added", nil
+	}
+	if sameServerDefinition(existing, server) {
+		return "reused", nil
 	}
 
 	if err := store.UpsertServer(cfg, tmpl.Name, server); err != nil {

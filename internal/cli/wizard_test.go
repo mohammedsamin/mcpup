@@ -50,7 +50,7 @@ func TestAddRegistryTemplatePreservesHTTPTemplateFields(t *testing.T) {
 	}
 }
 
-func TestSyncAfterRollbackReturnsErrorWhenCanonicalSyncFails(t *testing.T) {
+func TestSyncAfterRollbackSkipsUnmanagedExternalServers(t *testing.T) {
 	env := setupTestEnv(t)
 	runCLI(t, env, "init")
 
@@ -65,7 +65,15 @@ func TestSyncAfterRollbackReturnsErrorWhenCanonicalSyncFails(t *testing.T) {
 
 	w := &wizard{}
 	err := w.syncAfterRollback("cursor", backup.Metadata{SourcePath: cursorPath})
-	if err == nil {
-		t.Fatalf("expected canonical sync error for orphan server")
+	if err != nil {
+		t.Fatalf("expected unmanaged orphan server to be skipped, got error: %v", err)
+	}
+
+	cfg, loadErr := store.LoadConfig(env.configPath)
+	if loadErr != nil {
+		t.Fatalf("load config: %v", loadErr)
+	}
+	if len(cfg.Clients["cursor"].Servers) != 0 {
+		t.Fatalf("expected unmanaged orphan server to stay out of canonical config")
 	}
 }

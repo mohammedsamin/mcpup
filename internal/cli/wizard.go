@@ -135,7 +135,7 @@ func (w *wizard) maybeInit() error {
 			return recErr
 		}
 		workspace, _ := os.Getwd()
-		clients, servers, importErr := importClientStates(&cfg, reconciler, workspace)
+		clients, servers, skipped, importErr := importClientStates(&cfg, reconciler, workspace)
 		if importErr != nil {
 			return importErr
 		}
@@ -145,6 +145,10 @@ func (w *wizard) maybeInit() error {
 		if servers > 0 {
 			fmt.Fprintf(w.out, "\n  %s Imported %d servers from %d clients\n\n",
 				output.Green(output.SymbolOK), servers, clients)
+			if skipped > 0 {
+				fmt.Fprintf(w.out, "  %s Skipped %d external server(s) not in the built-in registry\n\n",
+					output.Yellow(output.SymbolWarn), skipped)
+			}
 		} else {
 			fmt.Fprintf(w.out, "\n  %s No existing servers found — you can add them below\n\n",
 				output.Dim(output.SymbolArrow))
@@ -223,6 +227,9 @@ func (w *wizard) addRegistryTemplate(tmpl registry.Template) error {
 	}
 
 	server := serverFromTemplate(tmpl, envMap)
+	if err := validateRegistryServerDefinition(tmpl.Name, tmpl, server); err != nil {
+		return err
+	}
 
 	if err := store.AddServer(&cfg, tmpl.Name, server); err != nil {
 		if strings.Contains(err.Error(), "already exists") {
@@ -422,7 +429,8 @@ func (w *wizard) removeServer() error {
 	name := serverNames[idx]
 	affectedClients := clientsReferencingServer(cfg, name)
 
-	confirmed, err := output.Confirm(w.in, w.out, fmt.Sprintf("Remove %q? This cannot be undone.", name), false)
+	confirmed, err := output.Confirm(w.in, w.out,
+		formatChangeSummary(fmt.Sprintf("Remove managed server %q", name), []string{name}, affectedClients), false)
 	if err != nil {
 		return err
 	}
@@ -1052,23 +1060,16 @@ func (w *wizard) syncAfterRollback(client string, meta backup.Metadata) error {
 		return err
 	}
 
-	clientCfg := cfg.Clients[client]
-	if clientCfg.Servers == nil {
-		clientCfg.Servers = map[string]store.ServerState{}
+	skipped, err := syncManagedClientState(&cfg, client, restored)
+	if err != nil {
+		return fmt.Errorf("restored client config, but failed to sync canonical config: %w", err)
 	}
-	for name := range clientCfg.Servers {
-		delete(clientCfg.Servers, name)
-	}
-	for name, srv := range restored.Servers {
-		clientCfg.Servers[name] = store.ServerState{
-			Enabled:       srv.Enabled,
-			EnabledTools:  srv.EnabledTools,
-			DisabledTools: srv.DisabledTools,
-		}
-	}
-	cfg.Clients[client] = clientCfg
 	if err := store.SaveConfig(cfgPath, cfg); err != nil {
 		return fmt.Errorf("restored client config, but failed to sync canonical config: %w", err)
+	}
+	if len(skipped) > 0 && w.out != nil {
+		fmt.Fprintf(w.out, "  %s Skipped unmanaged external server(s): %s\n",
+			output.Yellow(output.SymbolWarn), strings.Join(skipped, ", "))
 	}
 	return nil
 }

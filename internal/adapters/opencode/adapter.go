@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/mohammedsamin/mcpup/internal/adapters"
 	"github.com/mohammedsamin/mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 const ClientName = "opencode"
@@ -45,8 +47,10 @@ func (a Adapter) Read(path string) (planner.ClientState, error) {
 	}
 
 	state := planner.ClientState{
-		Client:  ClientName,
-		Servers: map[string]planner.ServerState{},
+		Client:     ClientName,
+		Servers:    map[string]planner.ServerState{},
+		Owned:      managedServersFromDoc(doc),
+		ServerDefs: map[string]store.Server{},
 	}
 
 	rawMCP, ok := doc["mcp"]
@@ -87,6 +91,11 @@ func (a Adapter) Read(path string) (planner.ClientState, error) {
 			}
 		}
 		state.Servers[serverName] = server
+		def, err := adapters.DecodeServerDefinitionEntry(entry)
+		if err != nil {
+			return planner.ClientState{}, fmt.Errorf("decode server definition for %s: %w", serverName, err)
+		}
+		state.ServerDefs[serverName] = def
 	}
 
 	return planner.NormalizeState(state), nil
@@ -94,7 +103,7 @@ func (a Adapter) Read(path string) (planner.ClientState, error) {
 
 // Apply computes diff from current to desired.
 func (a Adapter) Apply(current planner.ClientState, desired planner.ClientState) (planner.Plan, error) {
-	return planner.Diff(current, desired), nil
+	return adapters.ManagedDiff(current, desired), nil
 }
 
 // Write updates mcp.servers while preserving unknown keys.
@@ -118,8 +127,24 @@ func (a Adapter) Write(path string, desired planner.ClientState) error {
 		}
 	}
 
+	normalized := planner.NormalizeState(desired)
+	managedBefore := managedServersFromDoc(doc)
 	nextServers := map[string]map[string]json.RawMessage{}
-	for serverName, state := range planner.NormalizeState(desired).Servers {
+	for serverName, current := range existingServers {
+		if managedBefore[serverName] {
+			continue
+		}
+		if _, managedNow := normalized.Servers[serverName]; managedNow {
+			continue
+		}
+		entry := map[string]json.RawMessage{}
+		for key, value := range current {
+			entry[key] = append(json.RawMessage{}, value...)
+		}
+		nextServers[serverName] = entry
+	}
+
+	for serverName, state := range normalized.Servers {
 		entry := map[string]json.RawMessage{}
 		if current, ok := existingServers[serverName]; ok {
 			for key, value := range current {
@@ -190,6 +215,7 @@ func (a Adapter) Write(path string, desired planner.ClientState) error {
 		return err
 	}
 	mcpObj["servers"] = rawServers
+	setManagedServersInDoc(doc, normalized.Servers)
 
 	rawMCP, err := json.Marshal(mcpObj)
 	if err != nil {
@@ -213,4 +239,52 @@ func (a Adapter) Write(path string, desired planner.ClientState) error {
 func (a Adapter) Validate(path string) error {
 	_, err := a.Read(path)
 	return err
+}
+
+const metaKey = "_mcpup"
+
+type ownershipMetadata struct {
+	ManagedServers []string `json:"managedServers,omitempty"`
+}
+
+func managedServersFromDoc(doc adapters.JSONDocument) map[string]bool {
+	raw, ok := doc[metaKey]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+
+	var meta ownershipMetadata
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return nil
+	}
+
+	out := make(map[string]bool, len(meta.ManagedServers))
+	for _, name := range meta.ManagedServers {
+		if name != "" {
+			out[name] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func setManagedServersInDoc(doc adapters.JSONDocument, servers map[string]planner.ServerState) {
+	if len(servers) == 0 {
+		delete(doc, metaKey)
+		return
+	}
+
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	raw, err := json.Marshal(ownershipMetadata{ManagedServers: names})
+	if err != nil {
+		return
+	}
+	doc[metaKey] = raw
 }

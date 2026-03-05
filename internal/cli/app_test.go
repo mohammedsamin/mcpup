@@ -34,6 +34,21 @@ func TestAddErrorsOnDuplicate(t *testing.T) {
 	}
 }
 
+func TestAddRegistryTemplateFailsWhenLauncherMissing(t *testing.T) {
+	env := setupTestEnv(t)
+	runCLI(t, env, "init")
+	t.Setenv("PATH", "")
+
+	var stderr bytes.Buffer
+	err := Run([]string{"add", "github", "--env", "GITHUB_TOKEN=test-token"}, nil, &bytes.Buffer{}, &stderr)
+	if err == nil {
+		t.Fatalf("expected registry add to fail when launcher is missing")
+	}
+	if !strings.Contains(err.Error(), `requires executable "npx"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRemoveErrorsOnMissing(t *testing.T) {
 	env := setupTestEnv(t)
 	runCLI(t, env, "init")
@@ -59,25 +74,27 @@ func TestRemoveReconcilesClientConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read cursor config before remove: %v", err)
 	}
-	docBefore := map[string]map[string]map[string]any{}
+	docBefore := map[string]any{}
 	if err := json.Unmarshal(bodyBefore, &docBefore); err != nil {
 		t.Fatalf("parse cursor config before remove: %v", err)
 	}
-	if _, ok := docBefore["mcpServers"]["github"]; !ok {
+	serversBefore := docBefore["mcpServers"].(map[string]any)
+	if _, ok := serversBefore["github"]; !ok {
 		t.Fatalf("expected github to exist before remove")
 	}
 
-	runCLI(t, env, "remove", "github")
+	runCLI(t, env, "remove", "github", "--yes")
 
 	bodyAfter, err := os.ReadFile(cursorPath)
 	if err != nil {
 		t.Fatalf("read cursor config after remove: %v", err)
 	}
-	docAfter := map[string]map[string]map[string]any{}
+	docAfter := map[string]any{}
 	if err := json.Unmarshal(bodyAfter, &docAfter); err != nil {
 		t.Fatalf("parse cursor config after remove: %v", err)
 	}
-	if _, ok := docAfter["mcpServers"]["github"]; ok {
+	serversAfter := docAfter["mcpServers"].(map[string]any)
+	if _, ok := serversAfter["github"]; ok {
 		t.Fatalf("expected github to be removed from cursor config")
 	}
 }

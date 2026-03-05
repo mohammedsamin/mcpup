@@ -77,8 +77,8 @@ func TestAdapterRealWritePreservesUnknownKeys(t *testing.T) {
 	if _, ok := rawServers["github"]["customField"]; !ok {
 		t.Fatalf("expected github.customField to be preserved")
 	}
-	if _, ok := rawServers["slack"]; ok {
-		t.Fatalf("expected slack server to be removed from desired state")
+	if _, ok := rawServers["slack"]; !ok {
+		t.Fatalf("expected unmanaged slack server to be preserved")
 	}
 }
 

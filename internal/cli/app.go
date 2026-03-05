@@ -177,18 +177,20 @@ func runInit(opts GlobalOptions, args []string, out io.Writer) error {
 
 	importedClients := 0
 	importedServers := 0
+	skippedServers := 0
 	if *importExisting {
 		reconciler, recErr := core.NewReconciler()
 		if recErr != nil {
 			return recErr
 		}
 		workspace, _ := os.Getwd()
-		clients, servers, importErr := importClientStates(&cfg, reconciler, workspace)
+		clients, servers, skipped, importErr := importClientStates(&cfg, reconciler, workspace)
 		if importErr != nil {
 			return importErr
 		}
 		importedClients = clients
 		importedServers = servers
+		skippedServers = skipped
 		if !opts.DryRun {
 			if err := store.SaveConfig(path, cfg); err != nil {
 				return err
@@ -204,6 +206,7 @@ func runInit(opts GlobalOptions, args []string, out io.Writer) error {
 			"path":            path,
 			"importedClients": importedClients,
 			"importedServers": importedServers,
+			"skippedServers":  skippedServers,
 			"dryRun":          opts.DryRun,
 		},
 	})
@@ -257,12 +260,17 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 		return fmt.Errorf("%w: --command and --url are mutually exclusive", errUsage)
 	}
 
+	var registryTemplate registry.Template
+	usingRegistryTemplate := false
+
 	// When neither --command nor --url is provided, check the built-in registry.
 	if !hasCommand && !hasURL {
 		tmpl, found := registry.Lookup(fs.Arg(0))
 		if !found {
 			return fmt.Errorf("%w: add requires --command or --url (server %q is not in the built-in registry)", errUsage, fs.Arg(0))
 		}
+		registryTemplate = tmpl
+		usingRegistryTemplate = true
 		if tmpl.URL != "" {
 			*url = tmpl.URL
 			hasURL = true
@@ -349,6 +357,11 @@ func runAdd(opts GlobalOptions, args []string, out io.Writer) error {
 			Description: strings.TrimSpace(*description),
 		}
 	}
+	if usingRegistryTemplate {
+		if err := validateRegistryServerDefinition(fs.Arg(0), registryTemplate, server); err != nil {
+			return err
+		}
+	}
 
 	existed := false
 	if _, ok := cfg.Servers[fs.Arg(0)]; ok {
@@ -406,23 +419,19 @@ func runRemove(opts GlobalOptions, args []string, in *os.File, out io.Writer) er
 		return fmt.Errorf("%w: remove requires exactly one positional argument: <name>", errUsage)
 	}
 
-	// Interactive confirmation unless --yes.
-	if !opts.Yes && in != nil && output.IsTTY() {
-		confirmed, err := output.Confirm(in, out, fmt.Sprintf("Remove server %q? This cannot be undone.", args[0]), false)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			return fmt.Errorf("aborted")
-		}
-	}
-
 	path, cfg, err := store.EnsureConfig("")
 	if err != nil {
 		return err
 	}
 	serverName := args[0]
+	if _, exists := cfg.Servers[serverName]; !exists {
+		return fmt.Errorf("server %q not found", serverName)
+	}
 	affectedClients := clientsReferencingServer(cfg, serverName)
+	if err := requireManagedChangeApproval(opts, in, out,
+		formatChangeSummary(fmt.Sprintf("Remove managed server %q", serverName), []string{serverName}, affectedClients)); err != nil {
+		return err
+	}
 
 	candidate := store.CloneConfig(cfg)
 	if err := store.RemoveServer(&candidate, serverName); err != nil {
@@ -1138,24 +1147,26 @@ func runRollback(opts GlobalOptions, args []string, out io.Writer) error {
 			if restored, readErr := adapter.Read(meta.SourcePath); readErr == nil {
 				cfgPath, cfg, ensureErr := store.EnsureConfig("")
 				if ensureErr == nil {
-					clientCfg := cfg.Clients[*client]
-					if clientCfg.Servers == nil {
-						clientCfg.Servers = map[string]store.ServerState{}
+					skipped, syncErr := syncManagedClientState(&cfg, *client, restored)
+					if syncErr != nil {
+						return fmt.Errorf("rollback restored client config, but failed to sync canonical config: %w", syncErr)
 					}
-					// Reset this client's state to match the restored file.
-					for name := range clientCfg.Servers {
-						delete(clientCfg.Servers, name)
-					}
-					for name, srv := range restored.Servers {
-						clientCfg.Servers[name] = store.ServerState{
-							Enabled:       srv.Enabled,
-							EnabledTools:  srv.EnabledTools,
-							DisabledTools: srv.DisabledTools,
-						}
-					}
-					cfg.Clients[*client] = clientCfg
 					if err := store.SaveConfig(cfgPath, cfg); err != nil {
 						return fmt.Errorf("rollback restored client config, but failed to sync canonical config: %w", err)
+					}
+					if len(skipped) > 0 {
+						return printResult(out, opts, output.Result{
+							Command: "rollback",
+							Status:  "ok",
+							Message: fmt.Sprintf("rollback restored client %q from backup %s", *client, meta.Timestamp),
+							Data: map[string]any{
+								"client":         *client,
+								"timestamp":      meta.Timestamp,
+								"source":         meta.SourcePath,
+								"skippedServers": skipped,
+								"warning":        "unmanaged external servers were left out of canonical sync",
+							},
+						})
 					}
 				}
 			}
@@ -1354,14 +1365,15 @@ func normalizeArgs(args []string, valueFlags map[string]bool) ([]string, error) 
 	return append(flags, positionals...), nil
 }
 
-func importClientStates(cfg *store.Config, reconciler *core.Reconciler, workspace string) (int, int, error) {
+func importClientStates(cfg *store.Config, reconciler *core.Reconciler, workspace string) (int, int, int, error) {
 	importedClients := 0
 	importedServers := 0
+	skippedServers := 0
 
 	for _, client := range store.SupportedClients {
 		adapter, err := reconciler.Registry.Get(client)
 		if err != nil {
-			return importedClients, importedServers, err
+			return importedClients, importedServers, skippedServers, err
 		}
 		path, err := adapter.Detect(workspace)
 		if err != nil {
@@ -1376,6 +1388,7 @@ func importClientStates(cfg *store.Config, reconciler *core.Reconciler, workspac
 			if _, exists := cfg.Servers[serverName]; !exists {
 				tmpl, ok := registry.Lookup(serverName)
 				if !ok {
+					skippedServers++
 					continue
 				}
 				cfg.Servers[serverName] = serverFromTemplate(tmpl, nil)
@@ -1398,7 +1411,7 @@ func importClientStates(cfg *store.Config, reconciler *core.Reconciler, workspac
 		}
 	}
 
-	return importedClients, importedServers, nil
+	return importedClients, importedServers, skippedServers, nil
 }
 
 type repeatedFlag []string

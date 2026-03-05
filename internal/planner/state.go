@@ -12,6 +12,7 @@ import (
 type ClientState struct {
 	Client     string                  `json:"client"`
 	Servers    map[string]ServerState  `json:"servers"`
+	Owned      map[string]bool         `json:"-"`
 	ServerDefs map[string]store.Server `json:"-"` // populated by DesiredStateForClient, used by adapters for writing command/args/env
 }
 
@@ -36,6 +37,7 @@ func DesiredStateForClient(cfg store.Config, client string) (ClientState, error)
 	result := ClientState{
 		Client:     client,
 		Servers:    map[string]ServerState{},
+		Owned:      map[string]bool{},
 		ServerDefs: serverDefs,
 	}
 
@@ -62,11 +64,28 @@ func DesiredStateForClient(cfg store.Config, client string) (ClientState, error)
 // NormalizeState canonicalizes list ordering and empty map handling.
 func NormalizeState(state ClientState) ClientState {
 	out := ClientState{
-		Client:  strings.TrimSpace(state.Client),
-		Servers: map[string]ServerState{},
+		Client:     strings.TrimSpace(state.Client),
+		Servers:    map[string]ServerState{},
+		Owned:      map[string]bool{},
+		ServerDefs: map[string]store.Server{},
 	}
 	for serverName, serverState := range state.Servers {
-		out.Servers[strings.TrimSpace(serverName)] = normalizeServerState(serverState)
+		trimmed := strings.TrimSpace(serverName)
+		out.Servers[trimmed] = normalizeServerState(serverState)
+		if state.Owned[serverName] || state.Owned[trimmed] {
+			out.Owned[trimmed] = true
+		}
+		if def, ok := state.ServerDefs[serverName]; ok {
+			out.ServerDefs[trimmed] = cloneServerDefinition(def)
+		} else if def, ok := state.ServerDefs[trimmed]; ok {
+			out.ServerDefs[trimmed] = cloneServerDefinition(def)
+		}
+	}
+	if len(out.Owned) == 0 {
+		out.Owned = nil
+	}
+	if len(out.ServerDefs) == 0 {
+		out.ServerDefs = nil
 	}
 	return out
 }
@@ -130,5 +149,28 @@ func uniqueSorted(values []string) []string {
 		out = append(out, trimmed)
 	}
 	slices.Sort(out)
+	return out
+}
+
+func cloneServerDefinition(server store.Server) store.Server {
+	return store.Server{
+		Command:     server.Command,
+		Args:        append([]string{}, server.Args...),
+		Env:         cloneStringMap(server.Env),
+		URL:         server.URL,
+		Headers:     cloneStringMap(server.Headers),
+		Transport:   server.Transport,
+		Description: server.Description,
+	}
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
 	return out
 }

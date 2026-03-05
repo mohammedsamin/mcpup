@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/mohammedsamin/mcpup/internal/adapters"
 	"github.com/mohammedsamin/mcpup/internal/planner"
+	"github.com/mohammedsamin/mcpup/internal/store"
 )
 
 const ClientName = "codex"
@@ -75,7 +78,7 @@ func (a Adapter) Read(path string) (planner.ClientState, error) {
 
 // Apply computes state diff from current to desired.
 func (a Adapter) Apply(current planner.ClientState, desired planner.ClientState) (planner.Plan, error) {
-	return planner.Diff(current, desired), nil
+	return adapters.ManagedDiff(current, desired), nil
 }
 
 // Write writes desired state as real TOML [mcp_servers.X] sections
@@ -175,14 +178,34 @@ func readManagedBlock(data []byte) (planner.ClientState, bool, error) {
 	}
 
 	var payload struct {
-		Servers map[string]planner.ServerState `json:"servers"`
+		Servers map[string]codexServerEntry `json:"servers"`
 	}
 	if err := json.Unmarshal([]byte(strings.Join(jsonLines, "")), &payload); err != nil {
 		return planner.ClientState{}, true, fmt.Errorf("decode managed codex block: %w", err)
 	}
 
+	servers := make(map[string]planner.ServerState, len(payload.Servers))
+	defs := make(map[string]store.Server, len(payload.Servers))
+	for name, entry := range payload.Servers {
+		servers[name] = planner.ServerState{
+			Enabled:       entry.Enabled,
+			EnabledTools:  append([]string{}, entry.EnabledTools...),
+			DisabledTools: append([]string{}, entry.DisabledTools...),
+		}
+		defs[name] = store.Server{
+			Command:   entry.Command,
+			Args:      append([]string{}, entry.Args...),
+			Env:       maps.Clone(entry.Env),
+			URL:       entry.URL,
+			Headers:   maps.Clone(entry.Headers),
+			Transport: entry.Transport,
+		}
+	}
+
 	return planner.ClientState{
-		Servers: payload.Servers,
+		Servers:    servers,
+		Owned:      ownedNames(servers),
+		ServerDefs: defs,
 	}, true, nil
 }
 
@@ -233,6 +256,17 @@ func encodeManagedBlock(state planner.ClientState) ([]byte, error) {
 	}
 	out = append(out, managedEnd)
 	return []byte(strings.Join(out, "\n")), nil
+}
+
+func ownedNames(servers map[string]planner.ServerState) map[string]bool {
+	if len(servers) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(servers))
+	for name := range servers {
+		out[name] = true
+	}
+	return out
 }
 
 // encodeTOMLServers generates real TOML [mcp_servers.X] sections for enabled servers.
@@ -396,10 +430,12 @@ func splitLines(data []byte) []string {
 func parseSimpleTOMLState(data []byte) (planner.ClientState, error) {
 	lines := splitLines(data)
 	state := planner.ClientState{
-		Servers: map[string]planner.ServerState{},
+		Servers:    map[string]planner.ServerState{},
+		ServerDefs: map[string]store.Server{},
 	}
 
 	currentServer := ""
+	currentSubsection := ""
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -407,9 +443,21 @@ func parseSimpleTOMLState(data []byte) (planner.ClientState, error) {
 		}
 		if m := sectionPattern.FindStringSubmatch(trimmed); len(m) == 2 {
 			currentServer = m[1]
+			currentSubsection = ""
 			if _, exists := state.Servers[currentServer]; !exists {
 				state.Servers[currentServer] = planner.ServerState{Enabled: true}
 			}
+			if _, exists := state.ServerDefs[currentServer]; !exists {
+				state.ServerDefs[currentServer] = store.Server{}
+			}
+			continue
+		}
+		if currentServer != "" && trimmed == "[mcp_servers."+currentServer+".env]" {
+			currentSubsection = "env"
+			continue
+		}
+		if currentServer != "" && trimmed == "[mcp_servers."+currentServer+".headers]" {
+			currentSubsection = "headers"
 			continue
 		}
 
@@ -421,6 +469,24 @@ func parseSimpleTOMLState(data []byte) (planner.ClientState, error) {
 		if !ok {
 			continue
 		}
+		def := state.ServerDefs[currentServer]
+		switch currentSubsection {
+		case "env":
+			if def.Env == nil {
+				def.Env = map[string]string{}
+			}
+			def.Env[key] = strings.Trim(value, `"'`)
+			state.ServerDefs[currentServer] = def
+			continue
+		case "headers":
+			if def.Headers == nil {
+				def.Headers = map[string]string{}
+			}
+			def.Headers[key] = strings.Trim(value, `"'`)
+			state.ServerDefs[currentServer] = def
+			continue
+		}
+
 		server := state.Servers[currentServer]
 		switch key {
 		case "enabled":
@@ -429,8 +495,17 @@ func parseSimpleTOMLState(data []byte) (planner.ClientState, error) {
 			server.EnabledTools = parseSimpleList(value)
 		case "disabled_tools":
 			server.DisabledTools = parseSimpleList(value)
+		case "command":
+			def.Command = strings.Trim(value, `"'`)
+		case "args":
+			def.Args = parseSimpleList(value)
+		case "url":
+			def.URL = strings.Trim(value, `"'`)
+		case "transport":
+			def.Transport = strings.Trim(value, `"'`)
 		}
 		state.Servers[currentServer] = server
+		state.ServerDefs[currentServer] = def
 	}
 
 	return planner.NormalizeState(state), nil

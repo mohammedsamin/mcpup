@@ -77,8 +77,8 @@ func TestAdapterRealWritePreservesUnknownKeys(t *testing.T) {
 	if _, ok := rawServers["github"]["zedOnly"]; !ok {
 		t.Fatalf("expected github.zedOnly to be preserved")
 	}
-	if _, ok := rawServers["notion"]; ok {
-		t.Fatalf("expected notion server to be removed from desired state")
+	if _, ok := rawServers["notion"]; !ok {
+		t.Fatalf("expected unmanaged notion server to be preserved")
 	}
 }
 

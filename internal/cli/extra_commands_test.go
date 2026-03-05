@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,6 +34,33 @@ func TestUpdateRefreshesRegistryBackedServer(t *testing.T) {
 	}
 	if srv.Env["GITHUB_TOKEN"] != "test-token" {
 		t.Fatalf("expected existing env values to be preserved")
+	}
+}
+
+func TestUpdateDoesNotPersistCanonicalChangeWhenClientReconcileFails(t *testing.T) {
+	env := setupTestEnv(t)
+	runCLI(t, env, "init")
+	runCLI(t, env, "add", "github", "--command", "echo", "--arg", "old", "--env", "GITHUB_TOKEN=test-token")
+	runCLI(t, env, "enable", "github", "--client", "cursor")
+
+	cursorPath := filepath.Join(env.home, ".cursor", "mcp.json")
+	if err := os.WriteFile(cursorPath, []byte(`{"mcpServers":`), 0o644); err != nil {
+		t.Fatalf("corrupt cursor config: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := Run([]string{"update", "github", "--yes"}, nil, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected update to fail when client reconcile fails")
+	}
+
+	cfg, loadErr := store.LoadConfig(env.configPath)
+	if loadErr != nil {
+		t.Fatalf("load config after failed update: %v", loadErr)
+	}
+	if cfg.Servers["github"].Command != "echo" {
+		t.Fatalf("expected canonical command to remain unchanged after failed update, got %q", cfg.Servers["github"].Command)
 	}
 }
 

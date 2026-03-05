@@ -19,7 +19,12 @@ The format is inspired by Keep a Changelog and semantic versioning.
 ### Changed
 
 - Mutating CLI operations are idempotent and support dry-run flow.
+- Managed writes now preserve unmanaged client MCP entries instead of replacing whole maps.
+- `setup --update` and `update` now reconcile affected clients before canonical config is saved.
 
 ### Fixed
 
 - Reconcile failure recovery now restores from backup and returns stable exit semantics.
+- Rollback sync now skips unmanaged external entries instead of forcing them into canonical config.
+- Registry-backed add/setup/update now fail early on missing launchers or required env vars.
+- Doctor remains read-only and now reports ownership and managed drift.
