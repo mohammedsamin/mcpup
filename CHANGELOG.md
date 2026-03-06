@@ -6,25 +6,25 @@ The format is inspired by Keep a Changelog and semantic versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-06
+
 ### Added
 
-- Full CLI contract for `init`, `add`, `remove`, `enable`, `disable`, `list`, `status`, `profile`, `clients list`, `doctor`, `rollback`.
-- Canonical config schema, validation, migrations, and store operations.
-- Planner, diffing, dry-run summaries, reconciler with backup safety.
-- Client adapters for Claude Code, Cursor, Claude Desktop, Codex, and OpenCode.
-- Adapter fixtures and integration tests.
-- Doctor diagnostics and actionable output.
-- CI and release automation configuration.
+- Guided `setup` onboarding for selecting clients, installing registry servers, and collecting required inputs.
+- Remote `HTTP/SSE` MCP server support with canonical `url`, `headers`, and `transport` handling.
+- Ownership-aware reconciliation that preserves unmanaged client entries instead of replacing full client maps.
+- Registry prompt normalization and legacy definition migration for stale high-risk templates like Notion, Playwright, Filesystem, and ElevenLabs.
 
 ### Changed
 
-- Mutating CLI operations are idempotent and support dry-run flow.
-- Managed writes now preserve unmanaged client MCP entries instead of replacing whole maps.
 - `setup --update` and `update` now reconcile affected clients before canonical config is saved.
+- Wizard and CLI registry flows now collect user-facing inputs consistently instead of exposing low-level raw env shapes where avoidable.
+- README and release-facing docs now reflect the current 13-client, 97-server product surface.
 
 ### Fixed
 
-- Reconcile failure recovery now restores from backup and returns stable exit semantics.
-- Rollback sync now skips unmanaged external entries instead of forcing them into canonical config.
-- Registry-backed add/setup/update now fail early on missing launchers or required env vars.
-- Doctor remains read-only and now reports ownership and managed drift.
+- Remove flows no longer leave canonical state ahead of failed client writes.
+- Wizard add/enable flows no longer persist partial failed client mutations.
+- Rollback now reports canonical-sync failures instead of claiming silent success.
+- Doctor remains read-only and reports ownership, drift, legacy registry definitions, and required-env problems more accurately.
+- Broken registry templates and stale legacy definitions for Playwright, Filesystem, Notion, and ElevenLabs are repaired or detected automatically.
